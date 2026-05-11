@@ -82,6 +82,12 @@ export type RegistrationPayload = {
 export const VERIFICATION_THREADS_KEY = 'celebrity-verification-threads-v1';
 export const VERIFICATION_EVENT_NAME = 'celebrity-verification-chat-updated';
 export const VERIFICATION_SESSION_KEY = 'celebrity-verification-session-v1';
+export const MANAGEMENT_PAYMENT_WELCOME_MESSAGE =
+  'Welcome. The management team will communicate the means of payment to you in a few minutes.';
+
+const LEGACY_ADMIN_WELCOME_PATTERN = /^Welcome .+\. Thank you for registering for the .+ subscription\. Please upload your payment proof here, and management will verify it and guide you through scheduling your meeting appointment\.$/;
+const LEGACY_PAYMENT_PROOF_SYSTEM_MESSAGE =
+  'Payment proof submitted successfully. Please wait 20-40 minutes while our management team verifies your payment and schedules your appointment.';
 
 function createId(prefix: string) {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -97,7 +103,32 @@ export function readThreads(): VerificationThread[] {
   }
 
   try {
-    return JSON.parse(window.localStorage.getItem(VERIFICATION_THREADS_KEY) || '[]') as VerificationThread[];
+    const threads = JSON.parse(window.localStorage.getItem(VERIFICATION_THREADS_KEY) || '[]') as VerificationThread[];
+
+    return threads.map((thread) => {
+      let hasOnboardingReply = false;
+
+      const messages = thread.messages
+        .filter((message) => !(message.sender === 'system' && message.text === LEGACY_PAYMENT_PROOF_SYSTEM_MESSAGE))
+        .map((message) => {
+          if (message.sender === 'admin' && LEGACY_ADMIN_WELCOME_PATTERN.test(message.text)) {
+            hasOnboardingReply = true;
+            return { ...message, text: MANAGEMENT_PAYMENT_WELCOME_MESSAGE };
+          }
+
+          if (message.sender === 'admin' && message.text === MANAGEMENT_PAYMENT_WELCOME_MESSAGE) {
+            hasOnboardingReply = true;
+          }
+
+          return message;
+        });
+
+      return {
+        ...thread,
+        onboardingAutoReplySent: thread.onboardingAutoReplySent || hasOnboardingReply,
+        messages,
+      };
+    });
   } catch {
     window.localStorage.removeItem(VERIFICATION_THREADS_KEY);
     return [];
@@ -205,6 +236,17 @@ export function deleteMessage(threadId: string, messageId: string) {
   }));
 }
 
+export function deleteThread(threadId: string) {
+  const nextThreads = readThreads().filter((thread) => thread.id !== threadId);
+  writeThreads(nextThreads);
+
+  if (getSavedThreadSession() === threadId) {
+    window.localStorage.removeItem(VERIFICATION_SESSION_KEY);
+  }
+
+  return nextThreads;
+}
+
 export function updateAttachmentPaymentStatus(
   threadId: string,
   attachmentId: string,
@@ -280,7 +322,6 @@ export function createAttachmentFromFile(file: File): Promise<ChatAttachment> {
         type: file.type || 'application/octet-stream',
         size: file.size,
         dataUrl: reader.result,
-        paymentStatus: file.type.startsWith('image/') ? 'Awaiting Approval' : undefined,
       });
     };
 

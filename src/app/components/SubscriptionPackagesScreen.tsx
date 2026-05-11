@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'motion/react';
-import { BadgeCheck, CalendarCheck, CalendarClock, Check, CreditCard, Crown, FileCheck2, ShieldCheck, Sparkles, UsersRound, Video, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { BadgeCheck, CalendarCheck, CalendarClock, Check, ChevronLeft, ChevronRight, CreditCard, Crown, FileCheck2, ShieldCheck, Sparkles, UsersRound, Video, X } from 'lucide-react';
 import { formatSubscriptionText, loadSubscriptionContent } from '../data/subscriptionPackages';
 import { FloatingVerificationChatButton } from './verification/FloatingVerificationChatButton';
 
@@ -19,10 +19,29 @@ const fadeUp = {
   visible: { opacity: 1, y: 0, filter: 'blur(0px)' },
 };
 
+const processSlideVariants = {
+  enter: (direction: number) => ({
+    opacity: 0,
+    x: direction > 0 ? 80 : -80,
+    filter: 'blur(8px)',
+  }),
+  center: {
+    opacity: 1,
+    x: 0,
+    filter: 'blur(0px)',
+  },
+  exit: (direction: number) => ({
+    opacity: 0,
+    x: direction > 0 ? -80 : 80,
+    filter: 'blur(8px)',
+  }),
+};
+
 const CAPTION_DISPLAY_MS = 8000;
 const CAPTION_TYPE_SPEED_MS = 28;
-const REVIEW_POPUP_INTERVAL_MS = 10000;
-const REVIEW_POPUP_VISIBLE_MS = 5000;
+const REVIEW_POPUP_INTERVAL_MS = 22000;
+const REVIEW_POPUP_VISIBLE_MS = 15000;
+const PROCESS_STEP_INTERVAL_MS = 6500;
 const LEGACY_PACKAGE_DURATION = 'Every package subscription lasts for 3 months.';
 const TRUST_CLOSING_TEMPLATE = 'Your subscription is handled through a private verification process built for transparency, secure coordination, and reliable scheduling. Once payment is confirmed, our management team will guide the next steps and help arrange a professional, memorable video call experience with "{{hostName}}".';
 const LEGACY_CLOSING_TEMPLATE = 'Thank you for your understanding and support. We look forward to creating a memorable experience with "{{hostName}}".';
@@ -67,52 +86,52 @@ const mockFanReviews = [
     text: 'I expected a basic fan call, but management handled scheduling clearly and the conversation felt genuinely personal.',
   },
   {
-    name: 'Sophie Laurent',
-    country: 'France',
-    language: 'French',
-    text: 'Le processus etait clair, professionnel et rassurant. La session video m a donne une motivation incroyable.',
-  },
-  {
-    name: 'Lukas Schneider',
-    country: 'Germany',
-    language: 'German',
-    text: 'Die Buchung war strukturiert und der Videoanruf war sehr persoenlich. Der Preis war fair im Vergleich zu anderen Angeboten.',
-  },
-  {
-    name: 'Isabella Romano',
-    country: 'Italy',
-    language: 'Italian',
-    text: 'La verifica del pagamento mi ha dato fiducia. Dopo la video sessione, tutto e stato gestito con molta professionalita.',
-  },
-  {
-    name: 'Mateo Garcia',
-    country: 'Spain',
-    language: 'Spanish',
-    text: 'La suscripcion fue clara y razonable. Poder hablar por video con mi celebridad favorita fue una experiencia inolvidable.',
-  },
-  {
-    name: 'Ana Silva',
-    country: 'Brazil',
-    language: 'Portuguese',
-    text: 'A equipe confirmou tudo com cuidado. A chamada de video foi emocionante e valeu mais do que eu esperava.',
-  },
-  {
     name: 'Olivia Hughes',
     country: 'United Kingdom',
     language: 'English',
-    text: 'I liked that every step was documented in chat. It made the private booking feel safer and more premium.',
+    text: 'I liked that every step was documented in chat. It made the private booking feel safer, calmer, and more premium.',
   },
   {
-    name: 'Noah Andersson',
-    country: 'Sweden',
-    language: 'Swedish',
-    text: 'Bokningen var enkel och tydlig. Videosamtalet kaendes personligt och gav mig ny energi.',
+    name: 'Charlotte Evans',
+    country: 'Australia',
+    language: 'English',
+    text: 'The subscription process was easy to follow and the video session started on time. The whole experience felt carefully managed.',
   },
   {
-    name: 'Maja Kowalska',
-    country: 'Poland',
-    language: 'Polish',
-    text: 'Proces byl prosty i profesjonalny. Rozmowa wideo byla dla mnie ogromna inspiracja.',
+    name: 'Liam Thompson',
+    country: 'New Zealand',
+    language: 'English',
+    text: 'The verification chat helped me know exactly what to do next. The call itself was relaxed, warm, and memorable.',
+  },
+  {
+    name: 'Aoife Murphy',
+    country: 'Ireland',
+    language: 'English',
+    text: 'I was able to ask questions before submitting proof, and management replied with clear instructions. The final call felt very genuine.',
+  },
+  {
+    name: 'Rachel Lim',
+    country: 'Singapore',
+    language: 'English',
+    text: 'The private booking felt structured and secure. I appreciated the written confirmation before the appointment was scheduled.',
+  },
+  {
+    name: 'Maya Campbell',
+    country: 'Jamaica',
+    language: 'English',
+    text: 'The team made the process simple and respectful. Getting the video call confirmed through chat made everything feel official.',
+  },
+  {
+    name: 'Darren Lewis',
+    country: 'Trinidad and Tobago',
+    language: 'English',
+    text: 'I knew what was happening at each stage, from registration to payment review. The session gave me a story I still talk about.',
+  },
+  {
+    name: 'Sarah Attard',
+    country: 'Malta',
+    language: 'English',
+    text: 'The booking felt premium without being confusing. The chat record made the payment and scheduling steps easy to trust.',
   },
   {
     name: 'Aisha Khan',
@@ -280,10 +299,16 @@ export function SubscriptionPackagesScreen() {
     `Every booking moves through payment review and scheduling support, so your session with ${hostName} stays organized and trusted.`,
     `Limited private call windows make early subscription the best way to secure a memorable experience with ${hostName}.`,
   ], [hostName]);
+  const longestCaption = useMemo(
+    () => captions.reduce((longest, caption) => (caption.length > longest.length ? caption : longest), captions[0] || ''),
+    [captions]
+  );
   const [activeCaptionIndex, setActiveCaptionIndex] = useState(0);
   const [typedCaption, setTypedCaption] = useState('');
   const [activeReviewIndex, setActiveReviewIndex] = useState(0);
   const [isReviewVisible, setIsReviewVisible] = useState(false);
+  const [activeProcessStepIndex, setActiveProcessStepIndex] = useState(0);
+  const [processDirection, setProcessDirection] = useState(1);
   const displayPackages = useMemo(() => (
     content.packages.map((subscriptionPackage, index) => ({
       ...subscriptionPackage,
@@ -294,6 +319,8 @@ export function SubscriptionPackagesScreen() {
   ), [content.packages]);
   const selectedPackage = displayPackages.find((subscriptionPackage) => subscriptionPackage.id === selectedPackageId);
   const closingTemplate = content.closingTemplate === LEGACY_CLOSING_TEMPLATE ? TRUST_CLOSING_TEMPLATE : content.closingTemplate;
+  const activeProcessStep = subscriptionSteps[activeProcessStepIndex];
+  const ActiveProcessIcon = activeProcessStep.icon;
 
   useEffect(() => {
     const caption = captions[activeCaptionIndex];
@@ -347,6 +374,27 @@ export function SubscriptionPackagesScreen() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setProcessDirection(1);
+      setActiveProcessStepIndex((currentIndex) => (currentIndex + 1) % subscriptionSteps.length);
+    }, PROCESS_STEP_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  const switchProcessStep = (nextIndex: number) => {
+    setProcessDirection(nextIndex >= activeProcessStepIndex ? 1 : -1);
+    setActiveProcessStepIndex(nextIndex);
+  };
+
+  const moveProcessStep = (direction: number) => {
+    setProcessDirection(direction);
+    setActiveProcessStepIndex((currentIndex) => (
+      currentIndex + direction + subscriptionSteps.length
+    ) % subscriptionSteps.length);
+  };
 
   const scrollToPackages = () => {
     document.getElementById('packages')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -416,15 +464,27 @@ export function SubscriptionPackagesScreen() {
                 {content.eyebrow}
               </motion.div>
 
-              <motion.h1
+              <motion.div
                 variants={fadeUp}
                 transition={{ duration: 0.9, ease: smoothEase }}
-                className="max-w-4xl text-4xl leading-tight text-[#172033] sm:text-5xl lg:text-6xl"
-                style={{ fontWeight: 900 }}
+                className="relative max-w-4xl"
               >
-                <span>{typedCaption || captions[activeCaptionIndex].slice(0, 1)}</span>
-                <span className="ml-1 inline-block h-[0.82em] w-1 translate-y-1 rounded-full bg-[#0B5CFF] align-baseline animate-pulse" />
-              </motion.h1>
+                <h1
+                  aria-hidden="true"
+                  className="invisible text-4xl leading-tight text-[#172033] sm:text-5xl lg:text-6xl"
+                  style={{ fontWeight: 900 }}
+                >
+                  {longestCaption}
+                </h1>
+                <h1
+                  aria-live="polite"
+                  className="absolute inset-x-0 top-0 text-4xl leading-tight text-[#172033] sm:text-5xl lg:text-6xl"
+                  style={{ fontWeight: 900 }}
+                >
+                  <span>{typedCaption || captions[activeCaptionIndex].slice(0, 1)}</span>
+                  <span className="ml-1 inline-block h-[0.82em] w-1 translate-y-1 rounded-full bg-[#0B5CFF] align-baseline animate-pulse" />
+                </h1>
+              </motion.div>
 
               <motion.p
                 variants={fadeUp}
@@ -519,8 +579,8 @@ export function SubscriptionPackagesScreen() {
               </p>
             </div>
 
-            <div className="mb-8 rounded-[1.75rem] border border-[#D8E4FF] bg-white p-5 shadow-[0_22px_70px_rgba(11,92,255,0.10)] lg:p-6">
-              <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div className="mb-8 overflow-hidden rounded-[1.75rem] border border-[#D8E4FF] bg-white shadow-[0_22px_70px_rgba(11,92,255,0.10)]">
+              <div className="flex flex-col gap-2 border-b border-[#E5E9F2] p-5 md:flex-row md:items-end md:justify-between lg:p-6">
                 <div>
                   <p className="text-sm uppercase tracking-[0.18em] text-[#0B5CFF]" style={{ fontWeight: 900 }}>Subscription process</p>
                   <h3 className="mt-2 text-2xl text-[#172033]" style={{ fontWeight: 900 }}>From package selection to scheduled call</h3>
@@ -530,23 +590,106 @@ export function SubscriptionPackagesScreen() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                {subscriptionSteps.map((step, index) => {
-                  const Icon = step.icon;
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px]">
+                <div className="relative min-h-[300px] overflow-hidden bg-[linear-gradient(135deg,#F7FAFF,#FFFFFF)] p-5 lg:p-7">
+                  <AnimatePresence custom={processDirection} mode="wait">
+                    <motion.article
+                      key={activeProcessStep.title}
+                      custom={processDirection}
+                      variants={processSlideVariants}
+                      initial="enter"
+                      animate="center"
+                      exit="exit"
+                      transition={{ duration: 0.46, ease: smoothEase }}
+                      className="flex min-h-[250px] flex-col justify-between rounded-[1.35rem] border border-[#D8E4FF] bg-white p-5 shadow-[0_18px_50px_rgba(11,92,255,0.10)]"
+                    >
+                      <div>
+                        <div className="mb-6 flex items-center justify-between gap-4">
+                          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E8F1FF] text-[#0B5CFF]">
+                            <ActiveProcessIcon className="h-7 w-7" />
+                          </span>
+                          <span className="rounded-full bg-[#F4F8FF] px-3 py-1 text-xs text-[#0B5CFF]" style={{ fontWeight: 900 }}>
+                            Step {activeProcessStepIndex + 1} of {subscriptionSteps.length}
+                          </span>
+                        </div>
+                        <p className="text-2xl text-[#172033]" style={{ fontWeight: 900 }}>{activeProcessStep.title}</p>
+                        <p className="mt-3 max-w-2xl text-sm leading-7 text-[#4B5563]">{activeProcessStep.text}</p>
+                      </div>
 
-                  return (
-                    <div key={step.title} className="rounded-2xl border border-[#E5E9F2] bg-[#F7FAFF] p-4">
-                      <div className="mb-4 flex items-center justify-between gap-3">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8F1FF] text-[#0B5CFF]">
+                      <div className="mt-8 h-2 overflow-hidden rounded-full bg-[#E8F1FF]">
+                        <motion.div
+                          key={activeProcessStepIndex}
+                          className="h-full rounded-full bg-[linear-gradient(135deg,#0B5CFF,#25B7FF)]"
+                          initial={{ width: '0%' }}
+                          animate={{ width: `${((activeProcessStepIndex + 1) / subscriptionSteps.length) * 100}%` }}
+                          transition={{ duration: 0.5, ease: smoothEase }}
+                        />
+                      </div>
+                    </motion.article>
+                  </AnimatePresence>
+
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <div className="flex gap-2">
+                      {subscriptionSteps.map((step, index) => (
+                        <button
+                          key={step.title}
+                          type="button"
+                          onClick={() => switchProcessStep(index)}
+                          className={`h-2.5 rounded-full transition-all ${
+                            activeProcessStepIndex === index ? 'w-8 bg-[#0B5CFF]' : 'w-2.5 bg-[#C7D7FE] hover:bg-[#8DB3FF]'
+                          }`}
+                          aria-label={`Show process step ${index + 1}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => moveProcessStep(-1)}
+                        className="flex h-10 w-10 items-center justify-center rounded-full border border-[#D8E4FF] bg-white text-[#0B5CFF] hover:bg-[#F4F8FF]"
+                        aria-label="Previous process step"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveProcessStep(1)}
+                        className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0B5CFF] text-white shadow-[0_12px_30px_rgba(11,92,255,0.22)] hover:bg-[#0056D2]"
+                        aria-label="Next process step"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-px bg-[#E5E9F2] lg:grid-cols-1">
+                  {subscriptionSteps.map((step, index) => {
+                    const Icon = step.icon;
+                    const isActive = activeProcessStepIndex === index;
+
+                    return (
+                      <button
+                        key={step.title}
+                        type="button"
+                        onClick={() => switchProcessStep(index)}
+                        className={`flex items-center gap-3 bg-white p-4 text-left transition-colors ${
+                          isActive ? 'text-[#0B5CFF]' : 'text-[#4B5563] hover:bg-[#F7FAFF]'
+                        }`}
+                      >
+                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
+                          isActive ? 'bg-[#0B5CFF] text-white' : 'bg-[#E8F1FF] text-[#0B5CFF]'
+                        }`}>
                           <Icon className="h-5 w-5" />
                         </span>
-                        <span className="text-xs text-[#0B5CFF]" style={{ fontWeight: 900 }}>0{index + 1}</span>
-                      </div>
-                      <p className="text-sm text-[#172033]" style={{ fontWeight: 900 }}>{step.title}</p>
-                      <p className="mt-2 text-sm leading-6 text-[#6B7280]">{step.text}</p>
-                    </div>
-                  );
-                })}
+                        <span className="min-w-0">
+                          <span className="block text-xs uppercase tracking-[0.14em]" style={{ fontWeight: 900 }}>0{index + 1}</span>
+                          <span className="block truncate text-sm text-[#172033]" style={{ fontWeight: 900 }}>{step.title}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 

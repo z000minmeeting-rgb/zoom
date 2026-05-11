@@ -94,6 +94,10 @@ create policy "public can update verification threads"
   using (true)
   with check (true);
 
+create policy "public can delete verification threads"
+  on public.verification_threads for delete
+  using (true);
+
 create policy "public can create verification messages"
   on public.verification_messages for insert
   with check (true);

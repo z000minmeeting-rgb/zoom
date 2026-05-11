@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageSquareText, Search, UserRound, X } from 'lucide-react';
+import { ArrowLeft, MessageSquareText, Search, Trash2, UserRound, X } from 'lucide-react';
 import { WorkspaceTopBar } from './workspace/WorkspaceTopBar';
-import { formatStatusColor, readThreads, VerificationThread } from '../data/verificationChat';
+import { VERIFICATION_EVENT_NAME, deleteThread, formatStatusColor, readThreads, VerificationThread } from '../data/verificationChat';
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
@@ -12,7 +12,25 @@ export function AdminSubscribersScreen() {
   const navigate = useNavigate();
   const [searchValue, setSearchValue] = useState('');
   const [selectedSubscriber, setSelectedSubscriber] = useState<VerificationThread | null>(null);
-  const threads = readThreads();
+  const [threads, setThreads] = useState<VerificationThread[]>(() => readThreads());
+
+  useEffect(() => {
+    const refreshThreads = () => setThreads(readThreads());
+    window.addEventListener(VERIFICATION_EVENT_NAME, refreshThreads);
+    let channel: BroadcastChannel | null = null;
+
+    if ('BroadcastChannel' in window) {
+      channel = new BroadcastChannel(VERIFICATION_EVENT_NAME);
+      channel.onmessage = refreshThreads;
+    }
+
+    refreshThreads();
+
+    return () => {
+      window.removeEventListener(VERIFICATION_EVENT_NAME, refreshThreads);
+      channel?.close();
+    };
+  }, []);
 
   const filteredThreads = useMemo(() => {
     const query = searchValue.trim().toLowerCase();
@@ -29,6 +47,21 @@ export function AdminSubscribersScreen() {
       || thread.status.toLowerCase().includes(query)
     ));
   }, [searchValue, threads]);
+
+  const handleDeleteSubscriber = (subscriber: VerificationThread) => {
+    const shouldDelete = window.confirm(`Delete ${subscriber.fullName} and their verification chat history?`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    const nextThreads = deleteThread(subscriber.id);
+    setThreads(nextThreads);
+
+    if (selectedSubscriber?.id === subscriber.id) {
+      setSelectedSubscriber(null);
+    }
+  };
 
   return (
     <div className="relative flex h-dvh min-w-0 flex-1 flex-col overflow-hidden bg-[#F7F9FC]">
@@ -62,27 +95,42 @@ export function AdminSubscribersScreen() {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filteredThreads.map((thread) => (
-              <button
+              <article
                 key={thread.id}
-                type="button"
-                onClick={() => setSelectedSubscriber(thread)}
                 className="rounded-[1.5rem] border border-[#E5E9F2] bg-white p-5 text-left shadow-sm transition-colors hover:bg-[#F7FAFF]"
               >
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#E8F1FF]">
-                    <UserRound className="h-6 w-6 text-[#0B5CFF]" />
+                <button
+                  type="button"
+                  onClick={() => setSelectedSubscriber(thread)}
+                  className="w-full text-left"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#E8F1FF]">
+                      <UserRound className="h-6 w-6 text-[#0B5CFF]" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[#172033]" style={{ fontWeight: 900 }}>{thread.fullName}</p>
+                      <p className="truncate text-sm text-[#6B7280]">{thread.email}</p>
+                      <p className="mt-2 text-sm text-[#6B7280]">{thread.packageName} - {thread.packagePrice}</p>
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[#172033]" style={{ fontWeight: 900 }}>{thread.fullName}</p>
-                    <p className="truncate text-sm text-[#6B7280]">{thread.email}</p>
-                    <p className="mt-2 text-sm text-[#6B7280]">{thread.packageName} - {thread.packagePrice}</p>
-                  </div>
-                </div>
+                </button>
                 <div className="mt-4 flex items-center justify-between gap-3">
-                  <span className={`rounded-full border px-3 py-1 text-xs ${formatStatusColor(thread.status)}`} style={{ fontWeight: 800 }}>{thread.status}</span>
-                  <span className="text-xs text-[#8A94A6]">{formatDate(thread.createdAt)}</span>
+                  <div className="min-w-0">
+                    <span className={`rounded-full border px-3 py-1 text-xs ${formatStatusColor(thread.status)}`} style={{ fontWeight: 800 }}>{thread.status}</span>
+                    <span className="ml-2 text-xs text-[#8A94A6]">{formatDate(thread.createdAt)}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSubscriber(thread)}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#FEE4E2] bg-white px-3 py-1.5 text-xs text-[#B42318] hover:bg-[#FFF5F4]"
+                    style={{ fontWeight: 800 }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
                 </div>
-              </button>
+              </article>
             ))}
           </div>
         </div>
@@ -121,14 +169,25 @@ export function AdminSubscribersScreen() {
               ))}
             </div>
 
-            <button
-              type="button"
-              onClick={() => navigate(`/admin/chats/${selectedSubscriber.id}`)}
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#0B5CFF] px-5 py-3 text-white"
-            >
-              <MessageSquareText className="h-5 w-5" />
-              Open support chats
-            </button>
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => navigate(`/admin/chats/${selectedSubscriber.id}`)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#0B5CFF] px-5 py-3 text-white"
+              >
+                <MessageSquareText className="h-5 w-5" />
+                Open support chats
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteSubscriber(selectedSubscriber)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#FEE4E2] bg-white px-5 py-3 text-[#B42318] hover:bg-[#FFF5F4]"
+                style={{ fontWeight: 800 }}
+              >
+                <Trash2 className="h-5 w-5" />
+                Delete subscriber
+              </button>
+            </div>
           </div>
         </div>
       )}

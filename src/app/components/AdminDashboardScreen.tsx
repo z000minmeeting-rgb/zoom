@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Copy, ImageUp, Link, MessageSquareText, Plus, Settings, Trash2, UserRound, UsersRound, Video, X } from 'lucide-react';
 import { WorkspaceTopBar } from './workspace/WorkspaceTopBar';
-import { formatStatusColor, readThreads, VerificationThread } from '../data/verificationChat';
+import { VERIFICATION_EVENT_NAME, deleteThread, formatStatusColor, readThreads, VerificationThread } from '../data/verificationChat';
 
 type ClientProfile = {
   id: string;
@@ -81,6 +81,7 @@ export function AdminDashboardScreen() {
   const [generatedLink, setGeneratedLink] = useState('');
   const [copyLabel, setCopyLabel] = useState('Copy');
   const [selectedSubscriber, setSelectedSubscriber] = useState<VerificationThread | null>(null);
+  const [threads, setThreads] = useState<VerificationThread[]>(() => readThreads());
 
   const activeClient = useMemo(
     () => clients.find((client) => client.id === clientId) || null,
@@ -93,9 +94,27 @@ export function AdminDashboardScreen() {
   );
 
   const activeClientSubscribers = useMemo(
-    () => activeClient ? readThreads().filter((thread) => thread.clientId === activeClient.id) : [],
-    [activeClient]
+    () => activeClient ? threads.filter((thread) => thread.clientId === activeClient.id) : [],
+    [activeClient, threads]
   );
+
+  useEffect(() => {
+    const refreshThreads = () => setThreads(readThreads());
+    window.addEventListener(VERIFICATION_EVENT_NAME, refreshThreads);
+    let channel: BroadcastChannel | null = null;
+
+    if ('BroadcastChannel' in window) {
+      channel = new BroadcastChannel(VERIFICATION_EVENT_NAME);
+      channel.onmessage = refreshThreads;
+    }
+
+    refreshThreads();
+
+    return () => {
+      window.removeEventListener(VERIFICATION_EVENT_NAME, refreshThreads);
+      channel?.close();
+    };
+  }, []);
 
   const persistClients = (nextClients: ClientProfile[]) => {
     setClients(nextClients);
@@ -195,6 +214,18 @@ export function AdminDashboardScreen() {
         ? { ...currentClient, avatarImage: undefined }
         : currentClient
     )));
+  };
+
+  const handleDeleteSubscriber = (subscriber: VerificationThread) => {
+    const shouldDelete = window.confirm(`Delete ${subscriber.fullName} and their verification chat history?`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    const nextThreads = deleteThread(subscriber.id);
+    setThreads(nextThreads);
+    setSelectedSubscriber(null);
   };
 
   const actionMenu = (
@@ -668,14 +699,25 @@ export function AdminDashboardScreen() {
           ))}
         </div>
 
-        <button
-          type="button"
-          onClick={() => navigate('/admin/chats')}
-          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#0B5CFF] px-5 py-3 text-white"
-        >
-          <MessageSquareText className="h-5 w-5" />
-          Open support chats
-        </button>
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => navigate(`/admin/chats/${selectedSubscriber.id}`)}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#0B5CFF] px-5 py-3 text-white"
+          >
+            <MessageSquareText className="h-5 w-5" />
+            Open support chats
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDeleteSubscriber(selectedSubscriber)}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#FEE4E2] bg-white px-5 py-3 text-[#B42318] hover:bg-[#FFF5F4]"
+            style={{ fontWeight: 800 }}
+          >
+            <Trash2 className="h-5 w-5" />
+            Delete subscriber
+          </button>
+        </div>
       </div>
     </div>
   );

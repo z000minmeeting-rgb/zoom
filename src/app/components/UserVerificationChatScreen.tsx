@@ -4,6 +4,7 @@ import { ArrowLeft, CalendarCheck, ShieldCheck } from 'lucide-react';
 import { VerificationChatPanel } from './verification/VerificationChatPanel';
 import {
   VERIFICATION_EVENT_NAME,
+  MANAGEMENT_PAYMENT_WELCOME_MESSAGE,
   addMessage,
   formatStatusColor,
   getThread,
@@ -42,7 +43,7 @@ export function UserVerificationChatScreen() {
       addMessage(
         thread.id,
         'admin',
-        `Welcome ${thread.fullName}. Thank you for registering for the ${thread.packageName} subscription. Please upload your payment proof here, and management will verify it and guide you through scheduling your meeting appointment.`
+        MANAGEMENT_PAYMENT_WELCOME_MESSAGE
       );
       updateThread(thread.id, (currentThread) => ({
         ...currentThread,

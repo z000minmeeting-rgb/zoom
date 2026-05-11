@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle2, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Reply, Send, Trash2, X, XCircle } from 'lucide-react';
+import { CheckCheck, CheckCircle2, FileText, Image as ImageIcon, LoaderCircle, Paperclip, Reply, Send, Trash2, X, XCircle } from 'lucide-react';
 import {
   ChatAttachment,
   ChatMessage,
@@ -61,6 +61,61 @@ function messagePreview(message: ChatMessage) {
   return message.attachments[0]?.name || 'Attachment';
 }
 
+function PaymentStatusNotice({
+  status,
+  floating = false,
+}: {
+  status: NonNullable<ChatAttachment['paymentStatus']>;
+  floating?: boolean;
+}) {
+  const config = {
+    'Awaiting Approval': {
+      title: 'Pending verification',
+      description: 'Management is reviewing this payment proof.',
+      className: 'border-white/70 bg-white/92 text-[#172033]',
+      icon: <LoaderCircle className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-[#0B5CFF]" />,
+    },
+    Approved: {
+      title: 'Payment approved',
+      description: 'Management has approved this payment proof.',
+      className: 'border-[#BFE7D1] bg-[#EEFBF4]/95 text-[#157347]',
+      icon: <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#157347]" />,
+    },
+    Declined: {
+      title: 'Payment declined',
+      description: 'Management declined this payment proof.',
+      className: 'border-[#FEE4E2] bg-[#FFF5F4]/95 text-[#B42318]',
+      icon: <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-[#B42318]" />,
+    },
+  }[status];
+
+  return (
+    <div className={`${floating ? 'absolute inset-x-3 top-3 shadow-xl backdrop-blur' : 'mb-3'} rounded-2xl border p-3 ${config.className}`}>
+      <div className="flex items-start gap-3">
+        {config.icon}
+        <div>
+          <p className="text-sm" style={{ fontWeight: 900 }}>{config.title}</p>
+          <p className="mt-1 text-xs leading-5 opacity-75">{config.description}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MessageReceipt({ status }: { status: ChatMessage['status'] }) {
+  const isSeen = status === 'Seen';
+
+  return (
+    <span
+      className={`inline-flex items-center ${isSeen ? 'text-[#0B5CFF]' : 'text-[#8A94A6]'}`}
+      aria-label={isSeen ? 'Read' : 'Unread'}
+      title={isSeen ? 'Read' : 'Unread'}
+    >
+      <CheckCheck className="h-4 w-4" />
+    </span>
+  );
+}
+
 function AttachmentPreview({
   attachment,
   messageSender,
@@ -75,7 +130,8 @@ function AttachmentPreview({
   const [showApprovalActions, setShowApprovalActions] = useState(false);
   const isImage = attachment.type.startsWith('image/');
   const isVideo = attachment.type.startsWith('video/');
-  const isPaymentProof = isImage && messageSender === 'user' && attachment.paymentStatus;
+  const isPaymentProof = messageSender === 'user' && Boolean(attachment.paymentStatus);
+  const paymentStatus = attachment.paymentStatus;
 
   const approvePayment = () => {
     updateAttachmentPaymentStatus(threadId, attachment.id, 'Approved');
@@ -89,100 +145,92 @@ function AttachmentPreview({
     setShowApprovalActions(false);
   };
 
+  const adminPaymentActions = viewer === 'admin' && isPaymentProof && paymentStatus && (
+    paymentStatus === 'Awaiting Approval' ? (
+      <div className="mt-2 rounded-2xl border border-[#D8E4FF] bg-white p-2">
+        <button
+          type="button"
+          onClick={() => setShowApprovalActions((isOpen) => !isOpen)}
+          className="w-full rounded-xl bg-[#F4F8FF] px-3 py-2 text-sm text-[#0B5CFF]"
+          style={{ fontWeight: 900 }}
+        >
+          Awaiting your approval
+        </button>
+
+        {showApprovalActions && (
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={approvePayment}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#12A150] px-3 py-2 text-sm text-white"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Approve
+            </button>
+            <button
+              type="button"
+              onClick={declinePayment}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#B42318] px-3 py-2 text-sm text-white"
+            >
+              <XCircle className="h-4 w-4" />
+              Decline
+            </button>
+          </div>
+        )}
+      </div>
+    ) : (
+      <p className={`mt-2 rounded-xl px-3 py-2 text-sm ${
+        paymentStatus === 'Approved' ? 'bg-[#EEFBF4] text-[#157347]' : 'bg-[#FFF5F4] text-[#B42318]'
+      }`} style={{ fontWeight: 900 }}>
+        {paymentStatus}
+      </p>
+    )
+  );
+
   if (isImage) {
     return (
       <div className="mt-3">
         <a href={attachment.dataUrl} target="_blank" rel="noreferrer" className="relative block overflow-hidden rounded-2xl border border-white/60 bg-white/70">
           <img src={attachment.dataUrl} alt={attachment.name} className="max-h-72 w-full object-cover" />
 
-          {viewer === 'user' && isPaymentProof && attachment.paymentStatus === 'Awaiting Approval' && (
-            <div className="absolute inset-x-3 top-3 rounded-2xl border border-white/70 bg-white/92 p-3 text-[#172033] shadow-xl backdrop-blur">
-              <div className="flex items-start gap-3">
-                <LoaderCircle className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-[#0B5CFF]" />
-                <div>
-                  <p className="text-sm" style={{ fontWeight: 900 }}>Payment is being verified</p>
-                  <p className="mt-1 text-xs leading-5 text-[#6B7280]">Verification will take between 20-40 minutes.</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {viewer === 'user' && isPaymentProof && attachment.paymentStatus === 'Approved' && (
-            <div className="absolute inset-x-3 top-3 rounded-2xl border border-[#BFE7D1] bg-[#EEFBF4]/95 p-3 text-[#157347] shadow-xl backdrop-blur">
-              <p className="text-sm" style={{ fontWeight: 900 }}>✅ Payment approved</p>
-            </div>
-          )}
-
-          {viewer === 'user' && isPaymentProof && attachment.paymentStatus === 'Declined' && (
-            <div className="absolute inset-x-3 top-3 rounded-2xl border border-[#FEE4E2] bg-[#FFF5F4]/95 p-3 text-[#B42318] shadow-xl backdrop-blur">
-              <p className="text-sm" style={{ fontWeight: 900 }}>❌ Payment declined</p>
-            </div>
-          )}
+          {viewer === 'user' && isPaymentProof && paymentStatus && <PaymentStatusNotice status={paymentStatus} floating />}
         </a>
 
-        {viewer === 'admin' && isPaymentProof && attachment.paymentStatus === 'Awaiting Approval' && (
-          <div className="mt-2 rounded-2xl border border-[#D8E4FF] bg-white p-2">
-            <button
-              type="button"
-              onClick={() => setShowApprovalActions((isOpen) => !isOpen)}
-              className="w-full rounded-xl bg-[#F4F8FF] px-3 py-2 text-sm text-[#0B5CFF]"
-              style={{ fontWeight: 900 }}
-            >
-              Awaiting your approval
-            </button>
-
-            {showApprovalActions && (
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={approvePayment}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#12A150] px-3 py-2 text-sm text-white"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  Approve
-                </button>
-                <button
-                  type="button"
-                  onClick={declinePayment}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#B42318] px-3 py-2 text-sm text-white"
-                >
-                  <XCircle className="h-4 w-4" />
-                  Decline
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {viewer === 'admin' && isPaymentProof && attachment.paymentStatus && attachment.paymentStatus !== 'Awaiting Approval' && (
-          <p className={`mt-2 rounded-xl px-3 py-2 text-sm ${
-            attachment.paymentStatus === 'Approved' ? 'bg-[#EEFBF4] text-[#157347]' : 'bg-[#FFF5F4] text-[#B42318]'
-          }`} style={{ fontWeight: 900 }}>
-            {attachment.paymentStatus}
-          </p>
-        )}
+        {adminPaymentActions}
       </div>
     );
   }
 
   if (isVideo) {
     return (
-      <video src={attachment.dataUrl} controls className="mt-3 max-h-72 w-full rounded-2xl border border-white/60 bg-black" />
+      <div className="mt-3">
+        <div className="relative overflow-hidden rounded-2xl border border-white/60 bg-black">
+          <video src={attachment.dataUrl} controls className="max-h-72 w-full bg-black" />
+          {viewer === 'user' && isPaymentProof && paymentStatus && <PaymentStatusNotice status={paymentStatus} floating />}
+        </div>
+        {adminPaymentActions}
+      </div>
     );
   }
 
   return (
-    <a
-      href={attachment.dataUrl}
-      download={attachment.name}
-      className="mt-3 flex items-center gap-3 rounded-2xl border border-[#E5E9F2] bg-white/80 p-3 text-left"
-    >
-      <FileText className="h-5 w-5 shrink-0 text-[#0B5CFF]" />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm text-[#172033]" style={{ fontWeight: 700 }}>{attachment.name}</span>
-        <span className="text-xs text-[#6B7280]">{formatSize(attachment.size)}</span>
-      </span>
-    </a>
+    <div className="mt-3">
+      <a
+        href={attachment.dataUrl}
+        download={attachment.name}
+        className="block rounded-2xl border border-[#E5E9F2] bg-white/80 p-3 text-left"
+      >
+        {viewer === 'user' && isPaymentProof && paymentStatus && <PaymentStatusNotice status={paymentStatus} />}
+        <span className="flex items-center gap-3">
+          <FileText className="h-5 w-5 shrink-0 text-[#0B5CFF]" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm text-[#172033]" style={{ fontWeight: 700 }}>{attachment.name}</span>
+            <span className="text-xs text-[#6B7280]">{formatSize(attachment.size)}</span>
+          </span>
+        </span>
+      </a>
+      {adminPaymentActions}
+    </div>
   );
 }
 
@@ -220,8 +268,18 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
   }, [threadId]);
 
   useEffect(() => {
-    markThreadSeen(threadId, viewer);
-  }, [threadId, viewer]);
+    if (!thread) {
+      return;
+    }
+
+    const hasUnreadMessages = viewer === 'admin'
+      ? thread.unreadForAdmin > 0 || thread.messages.some((message) => message.sender === 'user' && message.status !== 'Seen')
+      : thread.unreadForUser > 0 || thread.messages.some((message) => message.sender === 'admin' && message.status !== 'Seen');
+
+    if (hasUnreadMessages) {
+      markThreadSeen(threadId, viewer);
+    }
+  }, [threadId, viewer, thread]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -280,7 +338,14 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
     }
 
     const sentWithAttachments = attachments.length > 0;
-    addMessage(threadId, viewer, trimmedMessage, attachments, replyTo);
+    const outgoingAttachments = viewer === 'user'
+      ? attachments.map((attachment) => ({
+          ...attachment,
+          paymentStatus: attachment.paymentStatus || 'Awaiting Approval' as const,
+        }))
+      : attachments;
+
+    addMessage(threadId, viewer, trimmedMessage, outgoingAttachments, replyTo);
 
     if (viewer === 'user' && sentWithAttachments) {
       updateThread(threadId, (currentThread) => ({
@@ -289,11 +354,6 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
           ? currentThread.status
           : 'Under Review',
       }));
-      addMessage(
-        threadId,
-        'system',
-        'Payment proof submitted successfully. Please wait 20-40 minutes while our management team verifies your payment and schedules your appointment.'
-      );
     }
 
     setMessageText('');
@@ -327,27 +387,6 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,#F7FAFF_0%,#FFFFFF_48%,#F4F8FF_100%)] px-3 py-4 sm:px-5">
-        {viewer === 'user' && (thread.status === 'Under Review' || thread.status === 'Pending Verification') && (
-          <motion.div
-            className="mb-4 rounded-3xl border border-[#D8E4FF] bg-white/86 p-4 shadow-sm"
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <div className="flex items-start gap-3">
-              <span className="relative mt-1 flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#0B5CFF] opacity-30" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-[#0B5CFF]" />
-              </span>
-              <div>
-                <p className="text-sm text-[#172033]" style={{ fontWeight: 900 }}>{thread.status}</p>
-                <p className="mt-1 text-sm leading-6 text-[#6B7280]">
-                  Please wait 20-30 minutes while our management team verifies your payment and schedules your meeting appointment.
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
         {groupedMessages.map((group) => (
           <div key={group.label}>
             <div className="sticky top-0 z-10 mx-auto mb-4 w-fit rounded-full border border-[#E5E9F2] bg-white/90 px-3 py-1 text-xs text-[#6B7280] shadow-sm backdrop-blur">
@@ -406,7 +445,7 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
                     {!isSystem && (
                       <div className={`mt-1 flex items-center gap-2 text-xs text-[#8A94A6] ${isMine ? 'justify-end' : 'justify-start'}`}>
                         <span>{formatTime(message.createdAt)}</span>
-                        {isMine && <span>{message.status}</span>}
+                        {isMine && <MessageReceipt status={message.status} />}
                         <button
                           type="button"
                           onClick={() => setReplyTo({ messageId: message.id, sender: message.sender, text: messagePreview(message) })}
