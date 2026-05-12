@@ -1,4 +1,5 @@
 import { isBrowserOffline, isSupabaseConfigured, supabase } from '../lib/supabase';
+import { reportSupabaseSyncError } from './syncStatus';
 
 export type ClientProfile = {
   id: string;
@@ -133,7 +134,7 @@ function writeClientsLocal(clients: ClientProfile[]) {
 }
 
 async function saveClientsRemote(clients: ClientProfile[]) {
-  if (!isSupabaseConfigured || !supabase || isBrowserOffline()) {
+  if (!isSupabaseConfigured || !supabase) {
     return;
   }
 
@@ -148,7 +149,7 @@ async function saveClientsRemote(clients: ClientProfile[]) {
 
 export function saveClientProfiles(clients: ClientProfile[]) {
   writeClientsLocal(clients);
-  saveClientsRemote(clients).catch(() => undefined);
+  saveClientsRemote(clients).catch((error) => reportSupabaseSyncError('client profiles', error));
 }
 
 export async function refreshClientProfilesFromRemote() {

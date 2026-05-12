@@ -1,4 +1,5 @@
 import { isBrowserOffline, isSupabaseConfigured, supabase } from '../lib/supabase';
+import { reportSupabaseSyncError } from './syncStatus';
 
 export type VerificationStatus =
   | 'Pending Verification'
@@ -398,7 +399,7 @@ function rowsToThreads(
 }
 
 async function persistThreadRemote(thread: VerificationThread) {
-  if (!isSupabaseConfigured || !supabase || isBrowserOffline() || !isUuid(thread.id)) {
+  if (!isSupabaseConfigured || !supabase || !isUuid(thread.id)) {
     return;
   }
 
@@ -439,7 +440,7 @@ async function persistThreadRemote(thread: VerificationThread) {
 }
 
 async function deleteThreadRemote(threadId: string) {
-  if (!isSupabaseConfigured || !supabase || isBrowserOffline() || !isUuid(threadId)) {
+  if (!isSupabaseConfigured || !supabase || !isUuid(threadId)) {
     return;
   }
 
@@ -447,7 +448,7 @@ async function deleteThreadRemote(threadId: string) {
 }
 
 async function deleteMessageRemote(messageId: string) {
-  if (!isSupabaseConfigured || !supabase || isBrowserOffline() || !isUuid(messageId)) {
+  if (!isSupabaseConfigured || !supabase || !isUuid(messageId)) {
     return;
   }
 
@@ -557,7 +558,7 @@ export function createVerificationThread(payload: RegistrationPayload) {
 
   thread.messages = thread.messages.map((message) => ({ ...message, threadId: thread.id }));
   writeThreads([thread, ...readThreads()]);
-  persistThreadRemote(thread).catch(() => undefined);
+  persistThreadRemote(thread).catch((error) => reportSupabaseSyncError('verification thread', error));
   saveThreadSession(thread.id, contextFromThread(thread));
   return thread;
 }
@@ -573,7 +574,7 @@ export function updateThread(threadId: string, updater: (thread: VerificationThr
   const updatedThread = nextThreads.find((thread) => thread.id === threadId) || null;
 
   if (updatedThread) {
-    persistThreadRemote(updatedThread).catch(() => undefined);
+    persistThreadRemote(updatedThread).catch((error) => reportSupabaseSyncError('verification thread', error));
   }
 
   return updatedThread;
@@ -606,7 +607,7 @@ export function addMessage(
 }
 
 export function deleteMessage(threadId: string, messageId: string) {
-  deleteMessageRemote(messageId).catch(() => undefined);
+  deleteMessageRemote(messageId).catch((error) => reportSupabaseSyncError('verification message delete', error));
 
   return updateThread(threadId, (thread) => ({
     ...thread,
@@ -617,7 +618,7 @@ export function deleteMessage(threadId: string, messageId: string) {
 export function deleteThread(threadId: string) {
   const nextThreads = readThreads().filter((thread) => thread.id !== threadId);
   writeThreads(nextThreads);
-  deleteThreadRemote(threadId).catch(() => undefined);
+  deleteThreadRemote(threadId).catch((error) => reportSupabaseSyncError('verification thread delete', error));
 
   if (getSavedThreadSession() === threadId) {
     window.localStorage.removeItem(VERIFICATION_SESSION_KEY);

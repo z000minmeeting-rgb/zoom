@@ -19,6 +19,8 @@ The admin dashboard opens through `/admin/login` with the 4-digit PIN `1688`, so
 
 Run `supabase/schema.sql` in the Supabase SQL Editor, or apply it with the Supabase CLI using database credentials.
 
+The schema file is safe to rerun. It recreates the row-level security policies that allow the browser app, using the anon key, to read and write the app tables. If the app shows a Supabase sync warning like `new row violates row-level security policy`, rerun `supabase/schema.sql` in your Supabase project.
+
 The service-role JWT can create storage buckets through the API, but Supabase does not expose arbitrary SQL DDL execution through the normal REST API.
 
 ## Storage

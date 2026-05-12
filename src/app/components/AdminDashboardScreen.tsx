@@ -13,6 +13,7 @@ import {
   refreshClientProfilesFromRemote,
   saveClientProfiles,
 } from '../data/clientProfiles';
+import { SUPABASE_SYNC_ERROR_EVENT_NAME, SupabaseSyncErrorDetail } from '../data/syncStatus';
 
 function buildMeetingLink(client: ClientProfile) {
   const token = createClientId();
@@ -43,6 +44,7 @@ export function AdminDashboardScreen() {
   const [copyLabel, setCopyLabel] = useState('Copy');
   const [selectedSubscriber, setSelectedSubscriber] = useState<VerificationThread | null>(null);
   const [threads, setThreads] = useState<VerificationThread[]>(() => readThreads());
+  const [syncError, setSyncError] = useState('');
 
   const activeClient = useMemo(
     () => clients.find((client) => client.id === clientId) || null,
@@ -80,6 +82,16 @@ export function AdminDashboardScreen() {
       channel?.close();
       window.clearInterval(intervalId);
     };
+  }, []);
+
+  useEffect(() => {
+    const handleSyncError = (event: Event) => {
+      const detail = (event as CustomEvent<SupabaseSyncErrorDetail>).detail;
+      setSyncError(`Saved in this browser, but Supabase did not save ${detail.area}: ${detail.message}`);
+    };
+
+    window.addEventListener(SUPABASE_SYNC_ERROR_EVENT_NAME, handleSyncError);
+    return () => window.removeEventListener(SUPABASE_SYNC_ERROR_EVENT_NAME, handleSyncError);
   }, []);
 
   useEffect(() => {
@@ -720,6 +732,14 @@ export function AdminDashboardScreen() {
       </div>
 
       <main className="min-h-0 flex-1 overflow-y-auto p-6 pb-28 lg:p-8 lg:pb-28">
+        {syncError && (
+          <div className="mx-auto mb-5 flex max-w-7xl items-start justify-between gap-4 rounded-2xl border border-[#F4D680] bg-[#FFF8E6] p-4 text-sm text-[#854D0E]">
+            <p>{syncError}</p>
+            <button type="button" onClick={() => setSyncError('')} className="shrink-0 rounded-full p-1 hover:bg-white/70" aria-label="Dismiss sync error">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         {activeClient ? clientDetailPage : dashboardPage}
       </main>
 

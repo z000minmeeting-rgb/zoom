@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { reportSupabaseSyncError } from './syncStatus';
 
 export type SubscriptionPackage = {
   id: string;
@@ -196,7 +197,7 @@ export function loadSubscriptionContent(): SubscriptionPageContent {
 
 export function saveSubscriptionContent(content: SubscriptionPageContent) {
   writeSubscriptionContentLocal(content);
-  saveSubscriptionContentRemote(content).catch(() => undefined);
+  saveSubscriptionContentRemote(content).catch((error) => reportSupabaseSyncError('subscription content', error));
 }
 
 export async function refreshSubscriptionContentFromRemote() {

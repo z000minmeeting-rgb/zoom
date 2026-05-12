@@ -77,80 +77,138 @@ alter table public.verification_threads enable row level security;
 alter table public.verification_messages enable row level security;
 alter table public.verification_attachments enable row level security;
 
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.client_profiles to anon, authenticated;
+grant select, insert, update, delete on public.subscription_content to anon, authenticated;
+grant select, insert, update, delete on public.verification_threads to anon, authenticated;
+grant select, insert, update, delete on public.verification_messages to anon, authenticated;
+grant select, insert, update, delete on public.verification_attachments to anon, authenticated;
+
+drop policy if exists "public can read clients" on public.client_profiles;
+drop policy if exists "authenticated admin can manage clients" on public.client_profiles;
+drop policy if exists "public can manage clients" on public.client_profiles;
+drop policy if exists "public can create clients" on public.client_profiles;
+drop policy if exists "public can update clients" on public.client_profiles;
+drop policy if exists "public can delete clients" on public.client_profiles;
+
 create policy "public can read clients"
   on public.client_profiles for select
+  to anon, authenticated
   using (true);
 
-create policy "authenticated admin can manage clients"
-  on public.client_profiles for all
-  to authenticated
+create policy "public can create clients"
+  on public.client_profiles for insert
+  to anon, authenticated
+  with check (true);
+
+create policy "public can update clients"
+  on public.client_profiles for update
+  to anon, authenticated
   using (true)
   with check (true);
 
-create policy "public can manage clients"
-  on public.client_profiles for all
-  using (true)
-  with check (true);
+create policy "public can delete clients"
+  on public.client_profiles for delete
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "public can read subscription content" on public.subscription_content;
+drop policy if exists "authenticated admin can manage subscription content" on public.subscription_content;
+drop policy if exists "public can manage subscription content" on public.subscription_content;
+drop policy if exists "public can create subscription content" on public.subscription_content;
+drop policy if exists "public can update subscription content" on public.subscription_content;
+drop policy if exists "public can delete subscription content" on public.subscription_content;
 
 create policy "public can read subscription content"
   on public.subscription_content for select
+  to anon, authenticated
   using (true);
 
-create policy "authenticated admin can manage subscription content"
-  on public.subscription_content for all
-  to authenticated
+create policy "public can create subscription content"
+  on public.subscription_content for insert
+  to anon, authenticated
+  with check (true);
+
+create policy "public can update subscription content"
+  on public.subscription_content for update
+  to anon, authenticated
   using (true)
   with check (true);
 
-create policy "public can manage subscription content"
-  on public.subscription_content for all
-  using (true)
-  with check (true);
+create policy "public can delete subscription content"
+  on public.subscription_content for delete
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "public can create verification threads" on public.verification_threads;
+drop policy if exists "public can read verification threads" on public.verification_threads;
+drop policy if exists "public can update verification threads" on public.verification_threads;
+drop policy if exists "public can delete verification threads" on public.verification_threads;
 
 create policy "public can create verification threads"
   on public.verification_threads for insert
+  to anon, authenticated
   with check (true);
 
 create policy "public can read verification threads"
   on public.verification_threads for select
+  to anon, authenticated
   using (true);
 
 create policy "public can update verification threads"
   on public.verification_threads for update
+  to anon, authenticated
   using (true)
   with check (true);
 
 create policy "public can delete verification threads"
   on public.verification_threads for delete
+  to anon, authenticated
   using (true);
+
+drop policy if exists "public can create verification messages" on public.verification_messages;
+drop policy if exists "public can read verification messages" on public.verification_messages;
+drop policy if exists "public can update verification messages" on public.verification_messages;
+drop policy if exists "public can delete verification messages" on public.verification_messages;
 
 create policy "public can create verification messages"
   on public.verification_messages for insert
+  to anon, authenticated
   with check (true);
 
 create policy "public can read verification messages"
   on public.verification_messages for select
+  to anon, authenticated
   using (true);
 
 create policy "public can update verification messages"
   on public.verification_messages for update
+  to anon, authenticated
   using (true)
   with check (true);
 
 create policy "public can delete verification messages"
   on public.verification_messages for delete
+  to anon, authenticated
   using (true);
+
+drop policy if exists "public can create verification attachments" on public.verification_attachments;
+drop policy if exists "public can read verification attachments" on public.verification_attachments;
+drop policy if exists "public can update verification attachments" on public.verification_attachments;
 
 create policy "public can create verification attachments"
   on public.verification_attachments for insert
+  to anon, authenticated
   with check (true);
 
 create policy "public can read verification attachments"
   on public.verification_attachments for select
+  to anon, authenticated
   using (true);
 
 create policy "public can update verification attachments"
   on public.verification_attachments for update
+  to anon, authenticated
   using (true)
   with check (true);
 
@@ -158,10 +216,15 @@ insert into storage.buckets (id, name, public)
 values ('zoom-assets', 'zoom-assets', true)
 on conflict (id) do nothing;
 
+drop policy if exists "public can read zoom assets" on storage.objects;
+drop policy if exists "public can upload zoom assets" on storage.objects;
+
 create policy "public can read zoom assets"
   on storage.objects for select
+  to anon, authenticated
   using (bucket_id = 'zoom-assets');
 
 create policy "public can upload zoom assets"
   on storage.objects for insert
+  to anon, authenticated
   with check (bucket_id = 'zoom-assets');
