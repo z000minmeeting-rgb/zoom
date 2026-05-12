@@ -9,6 +9,7 @@ import {
   formatStatusColor,
   getThread,
   markThreadSeen,
+  refreshThreadsFromRemote,
   saveThreadSession,
   setThreadTyping,
   updateThread,
@@ -22,12 +23,22 @@ export function UserVerificationChatScreen() {
 
   useEffect(() => {
     if (threadId) {
-      saveThreadSession(threadId);
+      const currentThread = getThread(threadId);
+      if (currentThread) {
+        saveThreadSession(threadId, currentThread);
+      }
       markThreadSeen(threadId, 'user');
     }
 
     const refreshThread = () => setThread(getThread(threadId));
     window.addEventListener(VERIFICATION_EVENT_NAME, refreshThread);
+    refreshThreadsFromRemote().then(() => {
+      const refreshedThread = getThread(threadId);
+      if (refreshedThread) {
+        saveThreadSession(threadId, refreshedThread);
+      }
+      setThread(refreshedThread);
+    });
     refreshThread();
 
     return () => window.removeEventListener(VERIFICATION_EVENT_NAME, refreshThread);

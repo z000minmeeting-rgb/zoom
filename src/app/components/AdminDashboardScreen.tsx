@@ -2,59 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Copy, ImageUp, Link, MessageSquareText, Plus, Settings, Trash2, UserRound, UsersRound, Video, X } from 'lucide-react';
 import { WorkspaceTopBar } from './workspace/WorkspaceTopBar';
-import { VERIFICATION_EVENT_NAME, deleteThread, formatStatusColor, readThreads, VerificationThread } from '../data/verificationChat';
-
-type ClientProfile = {
-  id: string;
-  name: string;
-  category: string;
-  email: string;
-  avatarColor: string;
-  avatarImage?: string;
-};
-
-const CLIENTS_KEY = 'zoom-admin-clients-v1';
-const avatarColors = ['#0B5CFF', '#7C3AED', '#059669', '#DC6803', '#D92D20', '#155EEF'];
-
-function createId() {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function getInitials(name: string) {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase() || 'C';
-}
-
-function loadClients(): ClientProfile[] {
-  const rawClients = window.localStorage.getItem(CLIENTS_KEY);
-
-  if (!rawClients) {
-    return [];
-  }
-
-  try {
-    return JSON.parse(rawClients) as ClientProfile[];
-  } catch {
-    window.localStorage.removeItem(CLIENTS_KEY);
-    return [];
-  }
-}
-
-function saveClients(clients: ClientProfile[]) {
-  window.localStorage.setItem(CLIENTS_KEY, JSON.stringify(clients));
-}
+import { VERIFICATION_EVENT_NAME, deleteThread, formatStatusColor, readThreads, refreshThreadsFromRemote, VerificationThread } from '../data/verificationChat';
+import {
+  CLIENTS_EVENT_NAME,
+  ClientProfile,
+  avatarColors,
+  createClientId,
+  getInitials,
+  readClients,
+  refreshClientProfilesFromRemote,
+  saveClientProfiles,
+} from '../data/clientProfiles';
 
 function buildMeetingLink(client: ClientProfile) {
-  const token = createId();
+  const token = createClientId();
   const params = new URLSearchParams({
     clientId: client.id,
     clientName: client.name,
@@ -70,7 +31,7 @@ function buildMeetingLink(client: ClientProfile) {
 export function AdminDashboardScreen() {
   const navigate = useNavigate();
   const { clientId } = useParams();
-  const [clients, setClients] = useState<ClientProfile[]>(() => loadClients());
+  const [clients, setClients] = useState<ClientProfile[]>(() => readClients());
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
@@ -108,17 +69,44 @@ export function AdminDashboardScreen() {
       channel.onmessage = refreshThreads;
     }
 
+    const refreshFromRemote = () => refreshThreadsFromRemote().then(setThreads);
+    const intervalId = window.setInterval(refreshFromRemote, 10000);
+
+    refreshFromRemote();
     refreshThreads();
 
     return () => {
       window.removeEventListener(VERIFICATION_EVENT_NAME, refreshThreads);
       channel?.close();
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshClients = () => setClients(readClients());
+    window.addEventListener(CLIENTS_EVENT_NAME, refreshClients);
+    let channel: BroadcastChannel | null = null;
+
+    if ('BroadcastChannel' in window) {
+      channel = new BroadcastChannel(CLIENTS_EVENT_NAME);
+      channel.onmessage = refreshClients;
+    }
+
+    const refreshClientsFromRemote = () => refreshClientProfilesFromRemote().then(setClients);
+    const intervalId = window.setInterval(refreshClientsFromRemote, 12000);
+
+    refreshClientsFromRemote();
+
+    return () => {
+      window.removeEventListener(CLIENTS_EVENT_NAME, refreshClients);
+      channel?.close();
+      window.clearInterval(intervalId);
     };
   }, []);
 
   const persistClients = (nextClients: ClientProfile[]) => {
     setClients(nextClients);
-    saveClients(nextClients);
+    saveClientProfiles(nextClients);
   };
 
   const resetGeneratedLink = () => {
@@ -134,12 +122,15 @@ export function AdminDashboardScreen() {
       return;
     }
 
+    const now = new Date().toISOString();
     const nextClient: ClientProfile = {
-      id: createId(),
+      id: createClientId(),
       name: trimmedName,
       category: clientCategory.trim() || 'Client',
       email: clientEmail.trim(),
       avatarColor: avatarColors[clients.length % avatarColors.length],
+      createdAt: now,
+      updatedAt: now,
     };
 
     persistClients([nextClient, ...clients]);
@@ -200,7 +191,7 @@ export function AdminDashboardScreen() {
 
       persistClients(clients.map((currentClient) => (
         currentClient.id === client.id
-          ? { ...currentClient, avatarImage: reader.result as string }
+          ? { ...currentClient, avatarImage: reader.result as string, updatedAt: new Date().toISOString() }
           : currentClient
       )));
     };
@@ -211,7 +202,7 @@ export function AdminDashboardScreen() {
   const removeClientAvatarImage = (client: ClientProfile) => {
     persistClients(clients.map((currentClient) => (
       currentClient.id === client.id
-        ? { ...currentClient, avatarImage: undefined }
+        ? { ...currentClient, avatarImage: undefined, updatedAt: new Date().toISOString() }
         : currentClient
     )));
   };

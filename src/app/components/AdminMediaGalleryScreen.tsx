@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, FileText, Search, X } from 'lucide-react';
 import { WorkspaceTopBar } from './workspace/WorkspaceTopBar';
-import { ChatAttachment, readThreads } from '../data/verificationChat';
+import { ChatAttachment, VERIFICATION_EVENT_NAME, readThreads, refreshThreadsFromRemote } from '../data/verificationChat';
 
 type GalleryItem = {
   attachment: ChatAttachment;
@@ -32,7 +32,22 @@ export function AdminMediaGalleryScreen() {
   const navigate = useNavigate();
   const [searchValue, setSearchValue] = useState('');
   const [previewItem, setPreviewItem] = useState<GalleryItem | null>(null);
-  const galleryItems = getGalleryItems();
+  const [galleryItems, setGalleryItems] = useState(() => getGalleryItems());
+
+  useEffect(() => {
+    const refreshGallery = () => setGalleryItems(getGalleryItems());
+    window.addEventListener(VERIFICATION_EVENT_NAME, refreshGallery);
+    const refreshFromRemote = () => refreshThreadsFromRemote().then(refreshGallery);
+    const intervalId = window.setInterval(refreshFromRemote, 10000);
+
+    refreshFromRemote();
+    refreshGallery();
+
+    return () => {
+      window.removeEventListener(VERIFICATION_EVENT_NAME, refreshGallery);
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   const filteredItems = useMemo(() => {
     const query = searchValue.trim().toLowerCase();

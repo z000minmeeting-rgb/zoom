@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import { WorkspaceTopBar } from './workspace/WorkspaceTopBar';
@@ -7,6 +7,7 @@ import {
   SubscriptionPageContent,
   createSubscriptionPackage,
   loadSubscriptionContent,
+  refreshSubscriptionContentFromRemote,
   resetSubscriptionContent,
   saveSubscriptionContent,
 } from '../data/subscriptionPackages';
@@ -48,6 +49,10 @@ export function AdminSubscriptionSettingsScreen() {
   const navigate = useNavigate();
   const [content, setContent] = useState<SubscriptionPageContent>(() => loadSubscriptionContent());
   const [saveStatus, setSaveStatus] = useState('');
+
+  useEffect(() => {
+    refreshSubscriptionContentFromRemote().then(setContent);
+  }, []);
 
   const updateContent = <Key extends keyof SubscriptionPageContent>(
     key: Key,

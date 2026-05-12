@@ -3,17 +3,18 @@ import type { FormEvent, ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft, BadgeCheck, ShieldCheck, UserRound } from 'lucide-react';
-import { loadSubscriptionContent } from '../data/subscriptionPackages';
+import { loadSubscriptionContent, refreshSubscriptionContentFromRemote } from '../data/subscriptionPackages';
 import { FloatingVerificationChatButton } from './verification/FloatingVerificationChatButton';
 import {
   createVerificationThread,
   findReturningThread,
   getSavedThreadSession,
   getThread,
+  refreshThreadsFromRemote,
   saveThreadSession,
 } from '../data/verificationChat';
+import { getClientAvatarImage, refreshClientProfilesFromRemote } from '../data/clientProfiles';
 
-const CLIENTS_KEY = 'zoom-admin-clients-v1';
 const subscriberInputClassName = 'relative z-10 w-full rounded-[1.35rem] bg-[#F7F9FC] px-4 py-3 text-[#172033] shadow-[inset_0_0_0_1px_rgba(216,228,255,0.95)] outline-none transition-colors placeholder:text-[#8A94A6] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0B5CFF]';
 const emptyRegistrationForm = {
   fullName: '',
@@ -25,30 +26,12 @@ const emptyRegistrationForm = {
   gender: '',
 };
 
-type StoredClientProfile = {
-  id: string;
-  avatarImage?: string;
-};
-
 function SubscriberFieldFrame({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <div className={`subscriber-input-frame ${className}`}>
       {children}
     </div>
   );
-}
-
-function getClientAvatarImage(clientId: string) {
-  if (!clientId || typeof window === 'undefined') {
-    return '';
-  }
-
-  try {
-    const clients = JSON.parse(window.localStorage.getItem(CLIENTS_KEY) || '[]') as StoredClientProfile[];
-    return clients.find((client) => client.id === clientId)?.avatarImage || '';
-  } catch {
-    return '';
-  }
 }
 
 function isImageAvatarValue(value: string) {
@@ -58,18 +41,28 @@ function isImageAvatarValue(value: string) {
 export function SubscriptionRegistrationScreen() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const content = useMemo(() => loadSubscriptionContent(), []);
+  const [content, setContent] = useState(() => loadSubscriptionContent());
   const clientId = searchParams.get('clientId')?.trim() || '';
+  const meetingLinkToken = searchParams.get('meetingLink')?.trim() || '';
   const packageId = searchParams.get('packageId') || content.packages[0]?.id || '';
   const selectedPackage = content.packages.find((subscriptionPackage) => subscriptionPackage.id === packageId) || content.packages[0];
   const hostName = searchParams.get('hostName')?.trim() || searchParams.get('clientName')?.trim() || 'the meeting host';
   const hostAvatar = searchParams.get('hostAvatar') || '#0B5CFF';
   const hostInitials = searchParams.get('hostInitials') || hostName.slice(0, 2).toUpperCase() || 'H';
-  const clientAvatarImage = useMemo(() => getClientAvatarImage(clientId), [clientId]);
+  const [clientAvatarImage, setClientAvatarImage] = useState(() => getClientAvatarImage(clientId));
   const heroAvatarImage = clientAvatarImage || (isImageAvatarValue(hostAvatar) ? hostAvatar : '');
   const hostAvatarColor = isImageAvatarValue(hostAvatar) ? '#0B5CFF' : hostAvatar;
   const hasGeneratedClientMeetingLink = Boolean(searchParams.get('meetingLink') && clientId);
-  const savedThread = getThread(getSavedThreadSession());
+  const [threadCacheVersion, setThreadCacheVersion] = useState(0);
+  const threadAccessContext = useMemo(() => ({
+    clientId,
+    meetingLinkToken,
+    hostName,
+  }), [clientId, hostName, meetingLinkToken]);
+  const savedThread = useMemo(
+    () => getThread(getSavedThreadSession(threadAccessContext)),
+    [threadAccessContext, threadCacheVersion]
+  );
   const registrationFormRef = useRef<HTMLFormElement | null>(null);
   const returningFormRef = useRef<HTMLFormElement | null>(null);
 
@@ -77,6 +70,18 @@ export function SubscriptionRegistrationScreen() {
   const [returningName, setReturningName] = useState('');
   const [returningContact, setReturningContact] = useState('');
   const [returningError, setReturningError] = useState('');
+
+  useEffect(() => {
+    refreshSubscriptionContentFromRemote().then(setContent);
+    refreshThreadsFromRemote().then(() => setThreadCacheVersion((version) => version + 1));
+  }, []);
+
+  useEffect(() => {
+    setClientAvatarImage(getClientAvatarImage(clientId));
+    refreshClientProfilesFromRemote().then(() => {
+      setClientAvatarImage(getClientAvatarImage(clientId));
+    });
+  }, [clientId]);
 
   useEffect(() => {
     if (searchParams.get('focus') !== 'returning') {
@@ -116,6 +121,7 @@ export function SubscriptionRegistrationScreen() {
       hostAvatar,
       hostInitials,
       clientId,
+      meetingLinkToken,
     });
 
     navigate(`/verification-chat/${thread.id}`);
@@ -123,14 +129,14 @@ export function SubscriptionRegistrationScreen() {
 
   const handleReturningAccess = (event: FormEvent) => {
     event.preventDefault();
-    const thread = findReturningThread(returningName, returningContact);
+    const thread = findReturningThread(returningName, returningContact, threadAccessContext);
 
     if (!thread) {
       setReturningError('No verification chat matched those details.');
       return;
     }
 
-    saveThreadSession(thread.id);
+    saveThreadSession(thread.id, thread);
     navigate(`/verification-chat/${thread.id}`);
   };
 
@@ -240,9 +246,25 @@ export function SubscriptionRegistrationScreen() {
               <SubscriberFieldFrame>
                 <input required value={form.country} onChange={(event) => updateForm('country', event.target.value)} placeholder="Country/Location" className={subscriberInputClassName} />
               </SubscriberFieldFrame>
-              <SubscriberFieldFrame>
-                <input required type="date" value={form.dateOfBirth} onChange={(event) => updateForm('dateOfBirth', event.target.value)} className={`${subscriberInputClassName} text-[#6B7280]`} />
-              </SubscriberFieldFrame>
+              <div>
+                <label htmlFor="subscriber-date-of-birth" className="mb-2 block px-1 text-sm text-[#4B5563]" style={{ fontWeight: 800 }}>
+                  Date of Birth
+                </label>
+                <SubscriberFieldFrame>
+                  <input
+                    id="subscriber-date-of-birth"
+                    required
+                    type="date"
+                    value={form.dateOfBirth}
+                    onChange={(event) => updateForm('dateOfBirth', event.target.value)}
+                    aria-describedby="subscriber-date-of-birth-help"
+                    className={`${subscriberInputClassName} text-[#6B7280]`}
+                  />
+                </SubscriberFieldFrame>
+                <p id="subscriber-date-of-birth-help" className="mt-2 px-1 text-xs text-[#6B7280]">
+                  Select your date of birth.
+                </p>
+              </div>
               <SubscriberFieldFrame>
                 <input required type="email" value={form.email} onChange={(event) => updateForm('email', event.target.value)} placeholder="Email Address" className={subscriberInputClassName} />
               </SubscriberFieldFrame>

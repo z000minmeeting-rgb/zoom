@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MessageSquareText, Search, Trash2, UserRound, X } from 'lucide-react';
 import { WorkspaceTopBar } from './workspace/WorkspaceTopBar';
-import { VERIFICATION_EVENT_NAME, deleteThread, formatStatusColor, readThreads, VerificationThread } from '../data/verificationChat';
+import { VERIFICATION_EVENT_NAME, deleteThread, formatStatusColor, readThreads, refreshThreadsFromRemote, VerificationThread } from '../data/verificationChat';
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
@@ -24,11 +24,16 @@ export function AdminSubscribersScreen() {
       channel.onmessage = refreshThreads;
     }
 
+    const refreshFromRemote = () => refreshThreadsFromRemote().then(setThreads);
+    const intervalId = window.setInterval(refreshFromRemote, 10000);
+
+    refreshFromRemote();
     refreshThreads();
 
     return () => {
       window.removeEventListener(VERIFICATION_EVENT_NAME, refreshThreads);
       channel?.close();
+      window.clearInterval(intervalId);
     };
   }, []);
 

@@ -2,15 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { BadgeCheck, CalendarCheck, CalendarClock, Check, ChevronLeft, ChevronRight, CreditCard, Crown, FileCheck2, ShieldCheck, Sparkles, UsersRound, Video, X } from 'lucide-react';
-import { formatSubscriptionText, loadSubscriptionContent } from '../data/subscriptionPackages';
+import { formatSubscriptionText, loadSubscriptionContent, refreshSubscriptionContentFromRemote } from '../data/subscriptionPackages';
 import { FloatingVerificationChatButton } from './verification/FloatingVerificationChatButton';
-
-const CLIENTS_KEY = 'zoom-admin-clients-v1';
-
-type StoredClientProfile = {
-  id: string;
-  avatarImage?: string;
-};
+import { getClientAvatarImage, refreshClientProfilesFromRemote } from '../data/clientProfiles';
 
 const smoothEase: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -209,19 +203,6 @@ function isImageAvatarValue(value: string) {
   return /^(data:image\/|https?:\/\/|\/)/.test(value);
 }
 
-function getClientAvatarImage(clientId: string) {
-  if (!clientId || typeof window === 'undefined') {
-    return '';
-  }
-
-  try {
-    const clients = JSON.parse(window.localStorage.getItem(CLIENTS_KEY) || '[]') as StoredClientProfile[];
-    return clients.find((client) => client.id === clientId)?.avatarImage || '';
-  } catch {
-    return '';
-  }
-}
-
 function ClientHeroImage({
   image,
   hostAvatarColor,
@@ -284,12 +265,12 @@ export function SubscriptionPackagesScreen() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [selectedPackageId, setSelectedPackageId] = useState('');
-  const content = useMemo(() => loadSubscriptionContent(), []);
+  const [content, setContent] = useState(() => loadSubscriptionContent());
   const clientId = searchParams.get('clientId')?.trim() || '';
   const hostName = searchParams.get('hostName')?.trim() || searchParams.get('clientName')?.trim() || 'the meeting host';
   const hostAvatar = searchParams.get('hostAvatar') || '#0B5CFF';
   const hostInitials = searchParams.get('hostInitials') || getInitials(hostName);
-  const clientAvatarImage = useMemo(() => getClientAvatarImage(clientId), [clientId]);
+  const [clientAvatarImage, setClientAvatarImage] = useState(() => getClientAvatarImage(clientId));
   const heroAvatarImage = clientAvatarImage || (isImageAvatarValue(hostAvatar) ? hostAvatar : '');
   const hostAvatarColor = isImageAvatarValue(hostAvatar) ? '#0B5CFF' : hostAvatar;
   const hasGeneratedClientMeetingLink = Boolean(searchParams.get('meetingLink') && clientId);
@@ -321,6 +302,17 @@ export function SubscriptionPackagesScreen() {
   const closingTemplate = content.closingTemplate === LEGACY_CLOSING_TEMPLATE ? TRUST_CLOSING_TEMPLATE : content.closingTemplate;
   const activeProcessStep = subscriptionSteps[activeProcessStepIndex];
   const ActiveProcessIcon = activeProcessStep.icon;
+
+  useEffect(() => {
+    refreshSubscriptionContentFromRemote().then(setContent);
+  }, []);
+
+  useEffect(() => {
+    setClientAvatarImage(getClientAvatarImage(clientId));
+    refreshClientProfilesFromRemote().then(() => {
+      setClientAvatarImage(getClientAvatarImage(clientId));
+    });
+  }, [clientId]);
 
   useEffect(() => {
     const caption = captions[activeCaptionIndex];

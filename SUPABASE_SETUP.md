@@ -13,6 +13,8 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key
 
 Do not put the service-role key in frontend files or Netlify public build variables.
 
+The admin dashboard opens through `/admin/login` with the 4-digit PIN `1688`, so it can be accessed from any device without creating a separate local admin profile per phone.
+
 ## Database Schema
 
 Run `supabase/schema.sql` in the Supabase SQL Editor, or apply it with the Supabase CLI using database credentials.

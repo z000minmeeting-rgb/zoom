@@ -20,6 +20,10 @@ export const supabase = isSupabaseConfigured
     })
   : null;
 
+export function isBrowserOffline() {
+  return typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine;
+}
+
 export function requireSupabase() {
   if (!supabase) {
     throw new Error('Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');

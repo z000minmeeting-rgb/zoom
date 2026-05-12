@@ -12,6 +12,7 @@ import {
   formatStatusColor,
   getThread,
   markThreadSeen,
+  refreshThreadsFromRemote,
   setThreadTyping,
   updateAttachmentPaymentStatus,
   updateThread,
@@ -259,11 +260,18 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
       channel.onmessage = refreshThread;
     }
 
+    const refreshFromRemote = () => refreshThreadsFromRemote().then(() => {
+      setThread(getThread(threadId));
+    });
+    const intervalId = window.setInterval(refreshFromRemote, 5000);
+
+    refreshFromRemote();
     refreshThread();
 
     return () => {
       window.removeEventListener(VERIFICATION_EVENT_NAME, refreshThread);
       channel?.close();
+      window.clearInterval(intervalId);
     };
   }, [threadId]);
 

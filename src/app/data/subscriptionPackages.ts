@@ -1,3 +1,5 @@
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
+
 export type SubscriptionPackage = {
   id: string;
   name: string;
@@ -19,6 +21,7 @@ export type SubscriptionPageContent = {
 };
 
 export const SUBSCRIPTION_CONTENT_KEY = 'zoom-subscription-packages-v1';
+export const SUBSCRIPTION_EVENT_NAME = 'zoom-subscription-packages-updated';
 export const HOST_NAME_TOKEN = '{{hostName}}';
 
 export const defaultSubscriptionContent: SubscriptionPageContent = {
@@ -114,6 +117,63 @@ function normalizePackage(value: unknown, fallback: SubscriptionPackage, index: 
   };
 }
 
+function normalizeLoadedContent(parsedContent: Partial<SubscriptionPageContent>): SubscriptionPageContent {
+  const defaultContent = cloneContent(defaultSubscriptionContent);
+  const packageFallbacks = defaultContent.packages;
+  const parsedPackages = Array.isArray(parsedContent.packages) ? parsedContent.packages : [];
+  const packages = parsedPackages.length > 0
+    ? parsedPackages.map((subscriptionPackage, index) => normalizePackage(
+      subscriptionPackage,
+      packageFallbacks[index] || packageFallbacks[packageFallbacks.length - 1],
+      index
+    ))
+    : packageFallbacks;
+
+  return {
+    eyebrow: asText(parsedContent.eyebrow, defaultContent.eyebrow),
+    titleTemplate: asText(parsedContent.titleTemplate, defaultContent.titleTemplate),
+    introTemplate: asText(parsedContent.introTemplate, defaultContent.introTemplate),
+    availablePackagesTitle: asText(parsedContent.availablePackagesTitle, defaultContent.availablePackagesTitle),
+    whyTitle: asText(parsedContent.whyTitle, defaultContent.whyTitle),
+    whyItems: asTextList(parsedContent.whyItems, defaultContent.whyItems),
+    closingTemplate: asText(parsedContent.closingTemplate, defaultContent.closingTemplate),
+    packages,
+  };
+}
+
+function dispatchSubscriptionEvent() {
+  window.dispatchEvent(new CustomEvent(SUBSCRIPTION_EVENT_NAME));
+
+  if ('BroadcastChannel' in window) {
+    const channel = new BroadcastChannel(SUBSCRIPTION_EVENT_NAME);
+    channel.postMessage({ type: 'subscription-content-updated' });
+    channel.close();
+  }
+}
+
+function writeSubscriptionContentLocal(content: SubscriptionPageContent) {
+  window.localStorage.setItem(SUBSCRIPTION_CONTENT_KEY, JSON.stringify(content));
+  dispatchSubscriptionEvent();
+}
+
+async function saveSubscriptionContentRemote(content: SubscriptionPageContent) {
+  if (!isSupabaseConfigured || !supabase) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from('subscription_content')
+    .upsert({
+      id: 'default',
+      content,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
+
+  if (error) {
+    throw error;
+  }
+}
+
 export function loadSubscriptionContent(): SubscriptionPageContent {
   if (typeof window === 'undefined') {
     return cloneContent(defaultSubscriptionContent);
@@ -127,27 +187,7 @@ export function loadSubscriptionContent(): SubscriptionPageContent {
 
   try {
     const parsedContent = JSON.parse(rawContent) as Partial<SubscriptionPageContent>;
-    const defaultContent = cloneContent(defaultSubscriptionContent);
-    const packageFallbacks = defaultContent.packages;
-    const parsedPackages = Array.isArray(parsedContent.packages) ? parsedContent.packages : [];
-    const packages = parsedPackages.length > 0
-      ? parsedPackages.map((subscriptionPackage, index) => normalizePackage(
-        subscriptionPackage,
-        packageFallbacks[index] || packageFallbacks[packageFallbacks.length - 1],
-        index
-      ))
-      : packageFallbacks;
-
-    return {
-      eyebrow: asText(parsedContent.eyebrow, defaultContent.eyebrow),
-      titleTemplate: asText(parsedContent.titleTemplate, defaultContent.titleTemplate),
-      introTemplate: asText(parsedContent.introTemplate, defaultContent.introTemplate),
-      availablePackagesTitle: asText(parsedContent.availablePackagesTitle, defaultContent.availablePackagesTitle),
-      whyTitle: asText(parsedContent.whyTitle, defaultContent.whyTitle),
-      whyItems: asTextList(parsedContent.whyItems, defaultContent.whyItems),
-      closingTemplate: asText(parsedContent.closingTemplate, defaultContent.closingTemplate),
-      packages,
-    };
+    return normalizeLoadedContent(parsedContent);
   } catch {
     window.localStorage.removeItem(SUBSCRIPTION_CONTENT_KEY);
     return cloneContent(defaultSubscriptionContent);
@@ -155,7 +195,28 @@ export function loadSubscriptionContent(): SubscriptionPageContent {
 }
 
 export function saveSubscriptionContent(content: SubscriptionPageContent) {
-  window.localStorage.setItem(SUBSCRIPTION_CONTENT_KEY, JSON.stringify(content));
+  writeSubscriptionContentLocal(content);
+  saveSubscriptionContentRemote(content).catch(() => undefined);
+}
+
+export async function refreshSubscriptionContentFromRemote() {
+  if (!isSupabaseConfigured || !supabase) {
+    return loadSubscriptionContent();
+  }
+
+  const { data, error } = await supabase
+    .from('subscription_content')
+    .select('content')
+    .eq('id', 'default')
+    .maybeSingle();
+
+  if (error || !data?.content) {
+    return loadSubscriptionContent();
+  }
+
+  const content = normalizeLoadedContent(data.content as Partial<SubscriptionPageContent>);
+  writeSubscriptionContentLocal(content);
+  return content;
 }
 
 export function resetSubscriptionContent() {

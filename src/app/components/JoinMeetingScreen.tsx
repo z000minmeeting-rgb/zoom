@@ -1,27 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { FloatingVerificationChatButton } from './verification/FloatingVerificationChatButton';
-
-const CLIENTS_KEY = 'zoom-admin-clients-v1';
-
-type StoredClientProfile = {
-  id: string;
-  avatarImage?: string;
-};
-
-function getClientAvatarImage(clientId: string) {
-  if (!clientId || typeof window === 'undefined') {
-    return '';
-  }
-
-  try {
-    const clients = JSON.parse(window.localStorage.getItem(CLIENTS_KEY) || '[]') as StoredClientProfile[];
-    return clients.find((client) => client.id === clientId)?.avatarImage || '';
-  } catch {
-    return '';
-  }
-}
+import { getClientAvatarImage, refreshClientProfilesFromRemote } from '../data/clientProfiles';
 
 function isImageAvatarValue(value: string) {
   return /^(data:image\/|https?:\/\/|\/)/.test(value);
@@ -35,7 +16,7 @@ export function JoinMeetingScreen() {
   const hostName = searchParams.get('hostName')?.trim() || '';
   const hostAvatar = searchParams.get('hostAvatar') || '#0B5CFF';
   const hostInitials = searchParams.get('hostInitials') || hostName.slice(0, 2).toUpperCase();
-  const clientAvatarImage = useMemo(() => getClientAvatarImage(clientId), [clientId]);
+  const [clientAvatarImage, setClientAvatarImage] = useState(() => getClientAvatarImage(clientId));
   const hostAvatarImage = clientAvatarImage || (isImageAvatarValue(hostAvatar) ? hostAvatar : '');
   const hostAvatarColor = isImageAvatarValue(hostAvatar) ? '#0B5CFF' : hostAvatar;
   const hasSharedMeetingLink = Boolean(meetingLinkToken);
@@ -46,6 +27,13 @@ export function JoinMeetingScreen() {
   const [activeTab, setActiveTab] = useState<'meeting' | 'event'>('meeting');
   const [audioDisabled, setAudioDisabled] = useState(false);
   const [videoDisabled, setVideoDisabled] = useState(false);
+
+  useEffect(() => {
+    setClientAvatarImage(getClientAvatarImage(clientId));
+    refreshClientProfilesFromRemote().then(() => {
+      setClientAvatarImage(getClientAvatarImage(clientId));
+    });
+  }, [clientId]);
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();

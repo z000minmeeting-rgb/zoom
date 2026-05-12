@@ -23,6 +23,7 @@ import {
   formatStatusColor,
   markThreadSeen,
   readThreads,
+  refreshThreadsFromRemote,
   updateThread,
 } from '../data/verificationChat';
 
@@ -71,11 +72,16 @@ export function AdminVerificationChatsScreen() {
       channel.onmessage = refreshThreads;
     }
 
+    const refreshFromRemote = () => refreshThreadsFromRemote().then(setThreads);
+    const intervalId = window.setInterval(refreshFromRemote, 8000);
+
+    refreshFromRemote();
     refreshThreads();
 
     return () => {
       window.removeEventListener(VERIFICATION_EVENT_NAME, refreshThreads);
       channel?.close();
+      window.clearInterval(intervalId);
     };
   }, []);
 

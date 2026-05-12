@@ -33,6 +33,7 @@ create table if not exists public.verification_threads (
   host_avatar text not null default '#0B5CFF',
   host_initials text not null default 'H',
   client_id uuid references public.client_profiles(id) on delete set null,
+  meeting_link_token text not null default '',
   status text not null default 'Pending Verification',
   appointment text not null default '',
   unread_for_admin integer not null default 0,
@@ -43,6 +44,9 @@ create table if not exists public.verification_threads (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.verification_threads
+  add column if not exists meeting_link_token text not null default '';
 
 create table if not exists public.verification_messages (
   id uuid primary key default gen_random_uuid(),
@@ -77,9 +81,31 @@ create policy "public can read clients"
   on public.client_profiles for select
   using (true);
 
+create policy "authenticated admin can manage clients"
+  on public.client_profiles for all
+  to authenticated
+  using (true)
+  with check (true);
+
+create policy "public can manage clients"
+  on public.client_profiles for all
+  using (true)
+  with check (true);
+
 create policy "public can read subscription content"
   on public.subscription_content for select
   using (true);
+
+create policy "authenticated admin can manage subscription content"
+  on public.subscription_content for all
+  to authenticated
+  using (true)
+  with check (true);
+
+create policy "public can manage subscription content"
+  on public.subscription_content for all
+  using (true)
+  with check (true);
 
 create policy "public can create verification threads"
   on public.verification_threads for insert

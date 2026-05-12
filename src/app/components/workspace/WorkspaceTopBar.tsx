@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Bell, ChevronDown, Search, Trash2, X } from 'lucide-react';
 import { useUser } from '../../context/UserContext';
-import { markThreadSeen, readThreads, VERIFICATION_EVENT_NAME } from '../../data/verificationChat';
+import { markThreadSeen, readThreads, refreshThreadsFromRemote, VERIFICATION_EVENT_NAME } from '../../data/verificationChat';
 
 const DISMISSED_NOTIFICATIONS_KEY = 'celebrity-admin-dismissed-notifications-v1';
 
@@ -42,9 +42,15 @@ export function WorkspaceTopBar({ leadingContent }: WorkspaceTopBarProps = {}) {
       channel.onmessage = refreshThreads;
     }
 
+    const refreshFromRemote = () => refreshThreadsFromRemote().then(setThreads);
+    const intervalId = window.setInterval(refreshFromRemote, 10000);
+
+    refreshFromRemote();
+
     return () => {
       window.removeEventListener(VERIFICATION_EVENT_NAME, refreshThreads);
       channel?.close();
+      window.clearInterval(intervalId);
     };
   }, []);
 

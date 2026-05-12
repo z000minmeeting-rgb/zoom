@@ -1,3 +1,5 @@
+import { isBrowserOffline, isSupabaseConfigured, supabase } from '../lib/supabase';
+
 export type VerificationStatus =
   | 'Pending Verification'
   | 'Under Review'
@@ -50,6 +52,7 @@ export type VerificationThread = {
   hostAvatar: string;
   hostInitials: string;
   clientId: string;
+  meetingLinkToken: string;
   status: VerificationStatus;
   appointment: string;
   createdAt: string;
@@ -77,6 +80,64 @@ export type RegistrationPayload = {
   hostAvatar: string;
   hostInitials: string;
   clientId: string;
+  meetingLinkToken?: string;
+};
+
+export type ThreadAccessContext = {
+  clientId?: string;
+  meetingLinkToken?: string;
+  hostName?: string;
+};
+
+type VerificationThreadRow = {
+  id: string;
+  full_name: string;
+  username: string;
+  country: string;
+  date_of_birth: string;
+  email: string;
+  phone: string;
+  gender: string;
+  package_id: string;
+  package_name: string;
+  package_price: string;
+  host_name: string;
+  host_avatar: string;
+  host_initials: string;
+  client_id: string | null;
+  meeting_link_token?: string | null;
+  status: VerificationStatus;
+  appointment: string;
+  unread_for_admin: number;
+  unread_for_user: number;
+  typing_user: boolean;
+  typing_admin: boolean;
+  onboarding_auto_reply_sent: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type VerificationMessageRow = {
+  id: string;
+  thread_id: string;
+  sender: ChatSender;
+  text: string;
+  status: ChatMessage['status'];
+  reply_to: ChatReply | null;
+  created_at: string;
+};
+
+type VerificationAttachmentRow = {
+  id: string;
+  message_id: string;
+  thread_id: string;
+  name: string;
+  type: string;
+  size: number;
+  storage_path: string;
+  payment_status: ChatAttachment['paymentStatus'] | null;
+  payment_status_updated_at: string | null;
+  created_at: string;
 };
 
 export const VERIFICATION_THREADS_KEY = 'celebrity-verification-threads-v1';
@@ -89,12 +150,76 @@ const LEGACY_ADMIN_WELCOME_PATTERN = /^Welcome .+\. Thank you for registering fo
 const LEGACY_PAYMENT_PROOF_SYSTEM_MESSAGE =
   'Payment proof submitted successfully. Please wait 20-40 minutes while our management team verifies your payment and schedules your appointment.';
 
-function createId(prefix: string) {
+function createId(_prefix: string) {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return `${prefix}-${crypto.randomUUID()}`;
+    return crypto.randomUUID();
   }
 
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function normalizeToken(value: string | undefined) {
+  return (value || '').trim().toLowerCase();
+}
+
+function sessionKeyForContext(context?: ThreadAccessContext) {
+  const meetingLinkToken = normalizeToken(context?.meetingLinkToken);
+
+  if (meetingLinkToken) {
+    return `${VERIFICATION_SESSION_KEY}:meeting:${meetingLinkToken}`;
+  }
+
+  const clientId = normalizeToken(context?.clientId);
+
+  if (clientId) {
+    return `${VERIFICATION_SESSION_KEY}:client:${clientId}`;
+  }
+
+  const hostName = normalizeToken(context?.hostName);
+
+  if (hostName) {
+    return `${VERIFICATION_SESSION_KEY}:host:${hostName}`;
+  }
+
+  return VERIFICATION_SESSION_KEY;
+}
+
+function contextFromThread(thread: Pick<VerificationThread, 'clientId' | 'meetingLinkToken' | 'hostName'>): ThreadAccessContext {
+  return {
+    clientId: thread.clientId,
+    meetingLinkToken: thread.meetingLinkToken,
+    hostName: thread.hostName,
+  };
+}
+
+function threadMatchesContext(thread: VerificationThread | null, context?: ThreadAccessContext) {
+  if (!thread) {
+    return false;
+  }
+
+  const meetingLinkToken = normalizeToken(context?.meetingLinkToken);
+
+  if (meetingLinkToken) {
+    return normalizeToken(thread.meetingLinkToken) === meetingLinkToken;
+  }
+
+  const clientId = normalizeToken(context?.clientId);
+
+  if (clientId) {
+    return normalizeToken(thread.clientId) === clientId;
+  }
+
+  const hostName = normalizeToken(context?.hostName);
+
+  if (hostName) {
+    return normalizeToken(thread.hostName) === hostName;
+  }
+
+  return true;
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 export function readThreads(): VerificationThread[] {
@@ -125,6 +250,7 @@ export function readThreads(): VerificationThread[] {
 
       return {
         ...thread,
+        meetingLinkToken: thread.meetingLinkToken || '',
         onboardingAutoReplySent: thread.onboardingAutoReplySent || hasOnboardingReply,
         messages,
       };
@@ -146,16 +272,258 @@ export function writeThreads(threads: VerificationThread[]) {
   }
 }
 
+function threadToRow(thread: VerificationThread): VerificationThreadRow {
+  return {
+    id: thread.id,
+    full_name: thread.fullName,
+    username: thread.username,
+    country: thread.country,
+    date_of_birth: thread.dateOfBirth,
+    email: thread.email,
+    phone: thread.phone,
+    gender: thread.gender,
+    package_id: thread.packageId,
+    package_name: thread.packageName,
+    package_price: thread.packagePrice,
+    host_name: thread.hostName,
+    host_avatar: thread.hostAvatar,
+    host_initials: thread.hostInitials,
+    client_id: thread.clientId || null,
+    meeting_link_token: thread.meetingLinkToken || null,
+    status: thread.status,
+    appointment: thread.appointment,
+    unread_for_admin: thread.unreadForAdmin,
+    unread_for_user: thread.unreadForUser,
+    typing_user: thread.typingUser,
+    typing_admin: thread.typingAdmin,
+    onboarding_auto_reply_sent: Boolean(thread.onboardingAutoReplySent),
+    created_at: thread.createdAt,
+    updated_at: thread.updatedAt,
+  };
+}
+
+function messageToRow(message: ChatMessage): VerificationMessageRow {
+  return {
+    id: message.id,
+    thread_id: message.threadId,
+    sender: message.sender,
+    text: message.text,
+    status: message.status,
+    reply_to: message.replyTo || null,
+    created_at: message.createdAt,
+  };
+}
+
+function attachmentToRow(attachment: ChatAttachment, messageId: string, threadId: string): VerificationAttachmentRow {
+  return {
+    id: attachment.id,
+    message_id: messageId,
+    thread_id: threadId,
+    name: attachment.name,
+    type: attachment.type,
+    size: attachment.size,
+    storage_path: attachment.dataUrl,
+    payment_status: attachment.paymentStatus || null,
+    payment_status_updated_at: attachment.paymentStatusUpdatedAt || null,
+    created_at: attachment.paymentStatusUpdatedAt || new Date().toISOString(),
+  };
+}
+
+function rowsToThreads(
+  threadRows: VerificationThreadRow[],
+  messageRows: VerificationMessageRow[],
+  attachmentRows: VerificationAttachmentRow[]
+) {
+  const attachmentsByMessageId = attachmentRows.reduce<Record<string, ChatAttachment[]>>((groups, attachment) => {
+    const nextAttachment: ChatAttachment = {
+      id: attachment.id,
+      name: attachment.name,
+      type: attachment.type,
+      size: attachment.size,
+      dataUrl: attachment.storage_path,
+      paymentStatus: attachment.payment_status || undefined,
+      paymentStatusUpdatedAt: attachment.payment_status_updated_at || undefined,
+    };
+
+    groups[attachment.message_id] = [...(groups[attachment.message_id] || []), nextAttachment];
+    return groups;
+  }, {});
+
+  const messagesByThreadId = messageRows
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    .reduce<Record<string, ChatMessage[]>>((groups, message) => {
+      const nextMessage: ChatMessage = {
+        id: message.id,
+        threadId: message.thread_id,
+        sender: message.sender,
+        text: message.text,
+        createdAt: message.created_at,
+        status: message.status,
+        replyTo: message.reply_to || undefined,
+        attachments: attachmentsByMessageId[message.id] || [],
+      };
+
+      groups[message.thread_id] = [...(groups[message.thread_id] || []), nextMessage];
+      return groups;
+    }, {});
+
+  return threadRows.map((thread): VerificationThread => ({
+    id: thread.id,
+    fullName: thread.full_name,
+    username: thread.username,
+    country: thread.country,
+    dateOfBirth: thread.date_of_birth,
+    email: thread.email,
+    phone: thread.phone,
+    gender: thread.gender,
+    packageId: thread.package_id,
+    packageName: thread.package_name,
+    packagePrice: thread.package_price,
+    hostName: thread.host_name,
+    hostAvatar: thread.host_avatar,
+    hostInitials: thread.host_initials,
+    clientId: thread.client_id || '',
+    meetingLinkToken: thread.meeting_link_token || '',
+    status: thread.status,
+    appointment: thread.appointment,
+    createdAt: thread.created_at,
+    updatedAt: thread.updated_at,
+    unreadForAdmin: thread.unread_for_admin,
+    unreadForUser: thread.unread_for_user,
+    typingUser: thread.typing_user,
+    typingAdmin: thread.typing_admin,
+    onboardingAutoReplySent: thread.onboarding_auto_reply_sent,
+    messages: messagesByThreadId[thread.id] || [],
+  }));
+}
+
+async function persistThreadRemote(thread: VerificationThread) {
+  if (!isSupabaseConfigured || !supabase || isBrowserOffline() || !isUuid(thread.id)) {
+    return;
+  }
+
+  const messageRows = thread.messages.filter((message) => isUuid(message.id)).map(messageToRow);
+  const attachmentRows = thread.messages.flatMap((message) => (
+    isUuid(message.id)
+      ? message.attachments.filter((attachment) => isUuid(attachment.id)).map((attachment) => attachmentToRow(attachment, message.id, thread.id))
+      : []
+  ));
+
+  const { error: threadError } = await supabase
+    .from('verification_threads')
+    .upsert(threadToRow(thread), { onConflict: 'id' });
+
+  if (threadError) {
+    throw threadError;
+  }
+
+  if (messageRows.length > 0) {
+    const { error: messageError } = await supabase
+      .from('verification_messages')
+      .upsert(messageRows, { onConflict: 'id' });
+
+    if (messageError) {
+      throw messageError;
+    }
+  }
+
+  if (attachmentRows.length > 0) {
+    const { error: attachmentError } = await supabase
+      .from('verification_attachments')
+      .upsert(attachmentRows, { onConflict: 'id' });
+
+    if (attachmentError) {
+      throw attachmentError;
+    }
+  }
+}
+
+async function deleteThreadRemote(threadId: string) {
+  if (!isSupabaseConfigured || !supabase || isBrowserOffline() || !isUuid(threadId)) {
+    return;
+  }
+
+  await supabase.from('verification_threads').delete().eq('id', threadId);
+}
+
+async function deleteMessageRemote(messageId: string) {
+  if (!isSupabaseConfigured || !supabase || isBrowserOffline() || !isUuid(messageId)) {
+    return;
+  }
+
+  await supabase.from('verification_messages').delete().eq('id', messageId);
+}
+
+export async function refreshThreadsFromRemote() {
+  if (!isSupabaseConfigured || !supabase || isBrowserOffline()) {
+    return readThreads();
+  }
+
+  const { data: threadRows, error: threadError } = await supabase
+    .from('verification_threads')
+    .select('*')
+    .order('updated_at', { ascending: false });
+
+  if (threadError || !threadRows) {
+    return readThreads();
+  }
+
+  const threadIds = (threadRows as VerificationThreadRow[]).map((thread) => thread.id);
+
+  if (threadIds.length === 0) {
+    writeThreads([]);
+    return [];
+  }
+
+  const [{ data: messageRows }, { data: attachmentRows }] = await Promise.all([
+    supabase
+      .from('verification_messages')
+      .select('*')
+      .in('thread_id', threadIds)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('verification_attachments')
+      .select('*')
+      .in('thread_id', threadIds)
+      .order('created_at', { ascending: true }),
+  ]);
+
+  const threads = rowsToThreads(
+    threadRows as VerificationThreadRow[],
+    (messageRows || []) as VerificationMessageRow[],
+    (attachmentRows || []) as VerificationAttachmentRow[]
+  );
+  writeThreads(threads);
+  return threads;
+}
+
 export function getThread(threadId: string) {
   return readThreads().find((thread) => thread.id === threadId) || null;
 }
 
-export function saveThreadSession(threadId: string) {
+export function saveThreadSession(threadId: string, context?: ThreadAccessContext) {
+  const thread = getThread(threadId);
+  const resolvedContext = context || (thread ? contextFromThread(thread) : undefined);
+  window.localStorage.setItem(sessionKeyForContext(resolvedContext), threadId);
   window.localStorage.setItem(VERIFICATION_SESSION_KEY, threadId);
 }
 
-export function getSavedThreadSession() {
-  return window.localStorage.getItem(VERIFICATION_SESSION_KEY) || '';
+export function getSavedThreadSession(context?: ThreadAccessContext) {
+  const scopedThreadId = window.localStorage.getItem(sessionKeyForContext(context)) || '';
+  const scopedThread = scopedThreadId ? getThread(scopedThreadId) : null;
+
+  if (threadMatchesContext(scopedThread, context)) {
+    return scopedThreadId;
+  }
+
+  const legacyThreadId = window.localStorage.getItem(VERIFICATION_SESSION_KEY) || '';
+  const legacyThread = legacyThreadId ? getThread(legacyThreadId) : null;
+
+  if (threadMatchesContext(legacyThread, context)) {
+    return legacyThreadId;
+  }
+
+  return '';
 }
 
 export function createVerificationThread(payload: RegistrationPayload) {
@@ -164,6 +532,7 @@ export function createVerificationThread(payload: RegistrationPayload) {
   const thread: VerificationThread = {
     id: createId('thread'),
     ...payload,
+    meetingLinkToken: payload.meetingLinkToken || '',
     status: 'Pending Verification',
     appointment: '',
     createdAt: now,
@@ -188,7 +557,8 @@ export function createVerificationThread(payload: RegistrationPayload) {
 
   thread.messages = thread.messages.map((message) => ({ ...message, threadId: thread.id }));
   writeThreads([thread, ...readThreads()]);
-  saveThreadSession(thread.id);
+  persistThreadRemote(thread).catch(() => undefined);
+  saveThreadSession(thread.id, contextFromThread(thread));
   return thread;
 }
 
@@ -200,7 +570,13 @@ export function updateThread(threadId: string, updater: (thread: VerificationThr
       : thread
   ));
   writeThreads(nextThreads);
-  return nextThreads.find((thread) => thread.id === threadId) || null;
+  const updatedThread = nextThreads.find((thread) => thread.id === threadId) || null;
+
+  if (updatedThread) {
+    persistThreadRemote(updatedThread).catch(() => undefined);
+  }
+
+  return updatedThread;
 }
 
 export function addMessage(
@@ -230,6 +606,8 @@ export function addMessage(
 }
 
 export function deleteMessage(threadId: string, messageId: string) {
+  deleteMessageRemote(messageId).catch(() => undefined);
+
   return updateThread(threadId, (thread) => ({
     ...thread,
     messages: thread.messages.filter((message) => message.id !== messageId),
@@ -239,6 +617,7 @@ export function deleteMessage(threadId: string, messageId: string) {
 export function deleteThread(threadId: string) {
   const nextThreads = readThreads().filter((thread) => thread.id !== threadId);
   writeThreads(nextThreads);
+  deleteThreadRemote(threadId).catch(() => undefined);
 
   if (getSavedThreadSession() === threadId) {
     window.localStorage.removeItem(VERIFICATION_SESSION_KEY);
@@ -293,11 +672,15 @@ export function markThreadSeen(threadId: string, viewer: 'user' | 'admin') {
   }));
 }
 
-export function findReturningThread(name: string, contact: string) {
+export function findReturningThread(name: string, contact: string, context?: ThreadAccessContext) {
   const normalizedName = name.trim().toLowerCase();
   const normalizedContact = contact.trim().toLowerCase();
 
   return readThreads().find((thread) => {
+    if (!threadMatchesContext(thread, context)) {
+      return false;
+    }
+
     const nameMatches = thread.fullName.trim().toLowerCase() === normalizedName;
     const emailMatches = thread.email.trim().toLowerCase() === normalizedContact;
     const phoneMatches = Boolean(thread.phone) && thread.phone.trim().toLowerCase() === normalizedContact;

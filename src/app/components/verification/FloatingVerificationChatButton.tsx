@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MessageCircle, Plus, RotateCcw, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getSavedThreadSession, getThread } from '../../data/verificationChat';
+import { getSavedThreadSession, getThread, refreshThreadsFromRemote } from '../../data/verificationChat';
 
 type FloatingVerificationChatButtonProps = {
   onStartNew?: () => void;
@@ -11,7 +11,21 @@ export function FloatingVerificationChatButton({ onStartNew }: FloatingVerificat
   const navigate = useNavigate();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
-  const savedThread = getThread(getSavedThreadSession());
+  const [threadCacheVersion, setThreadCacheVersion] = useState(0);
+  const activeSearchParams = new URLSearchParams(location.search);
+  const threadAccessContext = {
+    clientId: activeSearchParams.get('clientId')?.trim() || '',
+    meetingLinkToken: activeSearchParams.get('meetingLink')?.trim() || '',
+    hostName: activeSearchParams.get('hostName')?.trim() || activeSearchParams.get('clientName')?.trim() || '',
+  };
+  const savedThread = useMemo(
+    () => getThread(getSavedThreadSession(threadAccessContext)),
+    [location.search, threadCacheVersion]
+  );
+
+  useEffect(() => {
+    refreshThreadsFromRemote().then(() => setThreadCacheVersion((version) => version + 1));
+  }, [location.search]);
 
   const registrationPath = () => {
     const searchParams = new URLSearchParams(location.search);
