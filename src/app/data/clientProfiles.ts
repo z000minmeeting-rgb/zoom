@@ -27,6 +27,8 @@ export const CLIENTS_KEY = 'zoom-admin-clients-v1';
 export const CLIENTS_EVENT_NAME = 'zoom-admin-clients-updated';
 export const avatarColors = ['#0B5CFF', '#7C3AED', '#059669', '#DC6803', '#D92D20', '#155EEF'];
 
+let hasAttemptedClientBackfill = false;
+
 export function createClientId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
@@ -99,6 +101,25 @@ function mergeClients(localClients: ClientProfile[], remoteClients: ClientProfil
   return sortClients(Array.from(clientsById.values()));
 }
 
+function shouldBackfillLocalClients(localClients: ClientProfile[], remoteClients: ClientProfile[]) {
+  const remoteClientsById = new Map(remoteClients.map((client) => [client.id, client]));
+
+  return localClients.some((localClient) => {
+    const remoteClient = remoteClientsById.get(localClient.id);
+    return !remoteClient || clientUpdateTime(localClient) > clientUpdateTime(remoteClient);
+  });
+}
+
+function backfillLocalClients(localClients: ClientProfile[], remoteClients: ClientProfile[]) {
+  if (hasAttemptedClientBackfill || localClients.length === 0 || !shouldBackfillLocalClients(localClients, remoteClients)) {
+    return;
+  }
+
+  hasAttemptedClientBackfill = true;
+  saveClientsRemote(mergeClients(localClients, remoteClients))
+    .catch((error) => reportSupabaseSyncError('local client backfill', error));
+}
+
 function dispatchClientEvent() {
   window.dispatchEvent(new CustomEvent(CLIENTS_EVENT_NAME));
 
@@ -166,8 +187,11 @@ export async function refreshClientProfilesFromRemote() {
     return readClients();
   }
 
-  const clients = mergeClients(readClients(), (data as ClientProfileRow[]).map(rowToClient));
+  const localClients = readClients();
+  const remoteClients = (data as ClientProfileRow[]).map(rowToClient);
+  const clients = mergeClients(localClients, remoteClients);
   writeClientsLocal(clients);
+  backfillLocalClients(localClients, remoteClients);
   return clients;
 }
 

@@ -151,6 +151,8 @@ const LEGACY_ADMIN_WELCOME_PATTERN = /^Welcome .+\. Thank you for registering fo
 const LEGACY_PAYMENT_PROOF_SYSTEM_MESSAGE =
   'Payment proof submitted successfully. Please wait 20-40 minutes while our management team verifies your payment and schedules your appointment.';
 
+let hasAttemptedThreadBackfill = false;
+
 function createId(_prefix: string) {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
@@ -398,6 +400,46 @@ function rowsToThreads(
   }));
 }
 
+function threadUpdateTime(thread: VerificationThread) {
+  return new Date(thread.updatedAt || thread.createdAt || 0).getTime();
+}
+
+function mergeThreads(localThreads: VerificationThread[], remoteThreads: VerificationThread[]) {
+  const threadsById = new Map<string, VerificationThread>();
+
+  localThreads.forEach((thread) => threadsById.set(thread.id, thread));
+
+  remoteThreads.forEach((remoteThread) => {
+    const localThread = threadsById.get(remoteThread.id);
+
+    if (!localThread || threadUpdateTime(remoteThread) >= threadUpdateTime(localThread)) {
+      threadsById.set(remoteThread.id, remoteThread);
+    }
+  });
+
+  return Array.from(threadsById.values())
+    .sort((first, second) => threadUpdateTime(second) - threadUpdateTime(first));
+}
+
+function shouldBackfillLocalThreads(localThreads: VerificationThread[], remoteThreads: VerificationThread[]) {
+  const remoteThreadsById = new Map(remoteThreads.map((thread) => [thread.id, thread]));
+
+  return localThreads.some((localThread) => {
+    const remoteThread = remoteThreadsById.get(localThread.id);
+    return !remoteThread || threadUpdateTime(localThread) > threadUpdateTime(remoteThread);
+  });
+}
+
+function backfillLocalThreads(localThreads: VerificationThread[], remoteThreads: VerificationThread[]) {
+  if (hasAttemptedThreadBackfill || localThreads.length === 0 || !shouldBackfillLocalThreads(localThreads, remoteThreads)) {
+    return;
+  }
+
+  hasAttemptedThreadBackfill = true;
+  Promise.all(localThreads.map((thread) => persistThreadRemote(thread)))
+    .catch((error) => reportSupabaseSyncError('local verification backfill', error));
+}
+
 async function persistThreadRemote(thread: VerificationThread) {
   if (!isSupabaseConfigured || !supabase || !isUuid(thread.id)) {
     return;
@@ -460,6 +502,8 @@ export async function refreshThreadsFromRemote() {
     return readThreads();
   }
 
+  const localThreads = readThreads();
+
   const { data: threadRows, error: threadError } = await supabase
     .from('verification_threads')
     .select('*')
@@ -472,8 +516,8 @@ export async function refreshThreadsFromRemote() {
   const threadIds = (threadRows as VerificationThreadRow[]).map((thread) => thread.id);
 
   if (threadIds.length === 0) {
-    writeThreads([]);
-    return [];
+    backfillLocalThreads(localThreads, []);
+    return localThreads;
   }
 
   const [{ data: messageRows }, { data: attachmentRows }] = await Promise.all([
@@ -489,12 +533,14 @@ export async function refreshThreadsFromRemote() {
       .order('created_at', { ascending: true }),
   ]);
 
-  const threads = rowsToThreads(
+  const remoteThreads = rowsToThreads(
     threadRows as VerificationThreadRow[],
     (messageRows || []) as VerificationMessageRow[],
     (attachmentRows || []) as VerificationAttachmentRow[]
   );
+  const threads = mergeThreads(localThreads, remoteThreads);
   writeThreads(threads);
+  backfillLocalThreads(localThreads, remoteThreads);
   return threads;
 }
 
