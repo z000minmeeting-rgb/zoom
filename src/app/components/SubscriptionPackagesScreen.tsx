@@ -9,25 +9,22 @@ import { getClientAvatarImage, refreshClientProfilesFromRemote } from '../data/c
 const smoothEase: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 26, filter: 'blur(10px)' },
-  visible: { opacity: 1, y: 0, filter: 'blur(0px)' },
+  hidden: { opacity: 0, y: 26 },
+  visible: { opacity: 1, y: 0 },
 };
 
 const processSlideVariants = {
   enter: (direction: number) => ({
     opacity: 0,
     x: direction > 0 ? 80 : -80,
-    filter: 'blur(8px)',
   }),
   center: {
     opacity: 1,
     x: 0,
-    filter: 'blur(0px)',
   },
   exit: (direction: number) => ({
     opacity: 0,
     x: direction > 0 ? -80 : 80,
-    filter: 'blur(8px)',
   }),
 };
 
@@ -401,15 +398,15 @@ export function SubscriptionPackagesScreen() {
   const activeReview = mockFanReviews[activeReviewIndex];
 
   return (
-    <div className="h-dvh overflow-y-auto bg-white text-[#172033]">
+    <div className="min-h-svh bg-white text-[#172033]">
       <main>
         <section className="relative overflow-hidden bg-white">
           <div className="absolute inset-0 bg-[linear-gradient(135deg,#FFFFFF_0%,#F4F8FF_48%,#EAF7FF_100%)]" />
-          <div className="relative mx-auto grid max-w-7xl grid-cols-1 gap-8 px-4 pb-12 pt-4 md:min-h-dvh md:grid-cols-[0.92fr_1.08fr] md:items-center md:px-8 md:py-10 xl:gap-14">
+          <div className="relative mx-auto grid max-w-7xl grid-cols-1 gap-8 px-4 pb-12 pt-4 md:min-h-0 md:grid-cols-[0.92fr_1.08fr] md:items-center md:px-8 md:py-10 xl:gap-14">
             <motion.div
               className="order-first md:order-last"
-              initial={{ opacity: 0, scale: 0.96, filter: 'blur(12px)' }}
-              animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 1.2, ease: smoothEase }}
             >
               <ClientHeroImage
