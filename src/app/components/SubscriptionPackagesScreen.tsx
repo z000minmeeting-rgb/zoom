@@ -398,7 +398,7 @@ export function SubscriptionPackagesScreen() {
   const activeReview = mockFanReviews[activeReviewIndex];
 
   return (
-    <div className="min-h-svh bg-white text-[#172033]">
+    <div className="min-h-svh overflow-y-auto bg-white text-[#172033]">
       <main>
         <section className="relative overflow-hidden bg-white">
           <div className="absolute inset-0 bg-[linear-gradient(135deg,#FFFFFF_0%,#F4F8FF_48%,#EAF7FF_100%)]" />
