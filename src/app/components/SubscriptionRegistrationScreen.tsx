@@ -89,7 +89,7 @@ export function SubscriptionRegistrationScreen() {
     }
 
     const timeoutId = window.setTimeout(() => {
-      returningFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      returningFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
 
     return () => window.clearTimeout(timeoutId);
@@ -102,7 +102,7 @@ export function SubscriptionRegistrationScreen() {
   const resetRegistrationForm = () => {
     setForm(emptyRegistrationForm);
     setReturningError('');
-    registrationFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    registrationFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const handleSubmit = (event: FormEvent) => {
@@ -142,11 +142,11 @@ export function SubscriptionRegistrationScreen() {
 
   return (
     <div className="h-dvh overflow-y-auto bg-[linear-gradient(135deg,#FFFFFF,#F4F8FF)] text-[#172033]">
-      <main className="mx-auto grid min-h-dvh max-w-7xl grid-cols-1 gap-8 px-4 py-6 lg:grid-cols-[0.82fr_1.18fr] lg:px-8 lg:py-10">
+      <main className="mx-auto grid min-h-0 max-w-7xl grid-cols-1 gap-8 px-4 py-6 lg:grid-cols-[0.82fr_1.18fr] lg:px-8 lg:py-10">
         <motion.section
-          className="flex flex-col justify-between overflow-hidden rounded-[2rem] border border-white/20 bg-[radial-gradient(circle_at_18%_12%,rgba(37,183,255,0.92)_0%,rgba(37,183,255,0)_34%),linear-gradient(145deg,#063A9E_0%,#0B5CFF_52%,#082A72_100%)] p-6 text-white shadow-[0_28px_90px_rgba(11,92,255,0.26)] backdrop-blur-xl lg:min-h-[calc(100dvh-5rem)]"
-          initial={{ opacity: 0, x: -30, filter: 'blur(10px)' }}
-          animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+          className="flex flex-col justify-between overflow-hidden rounded-[2rem] border border-white/20 bg-[radial-gradient(circle_at_18%_12%,rgba(37,183,255,0.92)_0%,rgba(37,183,255,0)_34%),linear-gradient(145deg,#063A9E_0%,#0B5CFF_52%,#082A72_100%)] p-6 text-white shadow-[0_28px_90px_rgba(11,92,255,0.26)] backdrop-blur-xl"
+          initial={{ opacity: 0, x: -30 }}
+          animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8 }}
         >
           <div>
@@ -166,12 +166,12 @@ export function SubscriptionRegistrationScreen() {
               {heroAvatarImage ? (
                 <img src={heroAvatarImage} alt={hostName} className="h-full w-full object-cover" />
               ) : (
-                <span style={{ fontWeight: 900 }}>{hostInitials}</span>
+                <span className="font-black">{hostInitials}</span>
               )}
             </div>
 
-            <p className="text-sm uppercase tracking-[0.18em] text-[#D9EEFF]" style={{ fontWeight: 900 }}>Premium onboarding</p>
-            <h1 className="mt-3 text-4xl leading-tight text-white" style={{ fontWeight: 900 }}>
+            <p className="text-sm uppercase tracking-[0.18em] text-[#D9EEFF] font-black">Premium onboarding</p>
+            <h1 className="mt-3 text-4xl leading-tight text-white font-black">
               Register for verification with {hostName}
             </h1>
             <p className="mt-4 text-sm leading-7 text-[#EAF3FF]">
@@ -182,11 +182,11 @@ export function SubscriptionRegistrationScreen() {
               <div className="mt-6 rounded-3xl border border-white/25 bg-white/14 p-5 shadow-xl backdrop-blur-xl">
                 <div className="flex items-center gap-3">
                   <BadgeCheck className="h-5 w-5 text-white" />
-                  <p className="text-sm text-white" style={{ fontWeight: 900 }}>Selected package</p>
+                  <p className="text-sm text-white font-black">Selected package</p>
                 </div>
-                <p className="mt-3 text-2xl text-white" style={{ fontWeight: 900 }}>{selectedPackage.name}</p>
+                <p className="mt-3 text-2xl text-white font-black">{selectedPackage.name}</p>
                 <p className="mt-1 text-sm text-[#EAF3FF]">{selectedPackage.summary}</p>
-                <p className="mt-3 text-3xl text-white" style={{ fontWeight: 900 }}>{selectedPackage.price}</p>
+                <p className="mt-3 text-3xl text-white font-black">{selectedPackage.price}</p>
               </div>
             )}
           </div>
@@ -203,16 +203,16 @@ export function SubscriptionRegistrationScreen() {
 
         <motion.section
           className="space-y-5"
-          initial={{ opacity: 0, x: 30, filter: 'blur(10px)' }}
-          animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+          initial={{ opacity: 0, x: 30 }}
+          animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8, delay: 0.08 }}
         >
           {savedThread && (
             <div className="rounded-[1.5rem] border border-[#D8E4FF] bg-white/90 p-5 shadow-sm backdrop-blur">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm text-[#0B5CFF]" style={{ fontWeight: 900 }}>Existing verification found</p>
-                  <p className="mt-1 text-[#172033]" style={{ fontWeight: 800 }}>{savedThread.fullName} - {savedThread.status}</p>
+                  <p className="text-sm text-[#0B5CFF] font-black">Existing verification found</p>
+                  <p className="mt-1 text-[#172033] font-extrabold">{savedThread.fullName} - {savedThread.status}</p>
                 </div>
                 <button
                   type="button"
@@ -231,7 +231,7 @@ export function SubscriptionRegistrationScreen() {
                 <UserRound className="h-5 w-5 text-[#0B5CFF]" />
               </div>
               <div>
-                <h2 className="text-2xl text-[#172033]" style={{ fontWeight: 900 }}>Subscription registration</h2>
+                <h2 className="text-2xl text-[#172033] font-black">Subscription registration</h2>
                 <p className="text-sm text-[#6B7280]">Required before entering payment verification chat.</p>
               </div>
             </div>
@@ -247,7 +247,7 @@ export function SubscriptionRegistrationScreen() {
                 <input required value={form.country} onChange={(event) => updateForm('country', event.target.value)} placeholder="Country/Location" className={subscriberInputClassName} />
               </SubscriberFieldFrame>
               <div>
-                <label htmlFor="subscriber-date-of-birth" className="mb-2 block px-1 text-sm text-[#4B5563]" style={{ fontWeight: 800 }}>
+                <label htmlFor="subscriber-date-of-birth" className="mb-2 block px-1 text-sm text-[#4B5563] font-extrabold">
                   Date of Birth
                 </label>
                 <SubscriberFieldFrame>
@@ -271,24 +271,38 @@ export function SubscriptionRegistrationScreen() {
               <SubscriberFieldFrame>
                 <input value={form.phone} onChange={(event) => updateForm('phone', event.target.value)} placeholder="Phone Number (optional)" className={subscriberInputClassName} />
               </SubscriberFieldFrame>
-              <SubscriberFieldFrame className="md:col-span-2">
-                <select value={form.gender} onChange={(event) => updateForm('gender', event.target.value)} className={`${subscriberInputClassName} text-[#6B7280]`}>
-                  <option value="">Gender (optional)</option>
-                  <option>Female</option>
-                  <option>Male</option>
-                  <option>Non-binary</option>
-                  <option>Prefer not to say</option>
-                </select>
-              </SubscriberFieldFrame>
+              <div className="md:col-span-2">
+                <label htmlFor="subscriber-gender" className="mb-2 block px-1 text-sm text-[#4B5563] font-extrabold">
+                  Gender
+                </label>
+                <SubscriberFieldFrame>
+                  <select
+                    id="subscriber-gender"
+                    value={form.gender}
+                    onChange={(event) => updateForm('gender', event.target.value)}
+                    className={`${subscriberInputClassName} text-[#6B7280]`}
+                    aria-describedby="subscriber-gender-help"
+                  >
+                    <option value="">Gender (optional)</option>
+                    <option>Female</option>
+                    <option>Male</option>
+                    <option>Non-binary</option>
+                    <option>Prefer not to say</option>
+                  </select>
+                </SubscriberFieldFrame>
+                <p id="subscriber-gender-help" className="mt-2 px-1 text-xs text-[#6B7280]">
+                  Select your gender preference.
+                </p>
+              </div>
             </div>
 
-            <button type="submit" className="mt-6 w-full rounded-full bg-[linear-gradient(135deg,#0B5CFF,#25B7FF)] px-6 py-4 text-white shadow-[0_18px_45px_rgba(11,92,255,0.24)]" style={{ fontWeight: 900 }}>
+            <button type="submit" className="mt-6 w-full rounded-full bg-[linear-gradient(135deg,#0B5CFF,#25B7FF)] px-6 py-4 text-white shadow-[0_18px_45px_rgba(11,92,255,0.24)] font-black">
               Continue to Payment Verification Chat
             </button>
           </form>
 
           <form ref={returningFormRef} onSubmit={handleReturningAccess} className="rounded-[2rem] border border-[#E5E9F2] bg-white/90 p-5 shadow-sm backdrop-blur lg:p-7">
-            <h2 className="text-xl text-[#172033]" style={{ fontWeight: 900 }}>Continue Verification Chat</h2>
+            <h2 className="text-xl text-[#172033] font-black">Continue Verification Chat</h2>
             <p className="mt-1 text-sm text-[#6B7280]">Verify your identity to restore your chat history and admin responses.</p>
 
             <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -302,7 +316,7 @@ export function SubscriptionRegistrationScreen() {
 
             {returningError && <p className="mt-3 text-sm text-[#B42318]">{returningError}</p>}
 
-            <button type="submit" className="mt-5 rounded-full border border-[#D8E4FF] bg-white px-6 py-3 text-[#0B5CFF] hover:bg-[#F4F8FF]" style={{ fontWeight: 900 }}>
+            <button type="submit" className="mt-5 rounded-full border border-[#D8E4FF] bg-white px-6 py-3 text-[#0B5CFF] hover:bg-[#F4F8FF] font-black">
               Restore chat access
             </button>
           </form>

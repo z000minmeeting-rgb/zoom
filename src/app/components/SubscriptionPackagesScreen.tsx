@@ -240,7 +240,7 @@ function ClientHeroImage({
             className="flex h-36 w-36 items-center justify-center rounded-[2rem] border border-white/80 text-5xl text-white shadow-2xl"
             style={{ backgroundColor: hostAvatarColor }}
           >
-            <span style={{ fontWeight: 900 }}>{hostInitials}</span>
+            <span className="font-black">{hostInitials}</span>
           </div>
         </motion.div>
       )}
@@ -254,8 +254,8 @@ function ClientHeroImage({
         animate={{ opacity: 1, x: 0, y: 0 }}
         transition={{ delay: 0.35, duration: 0.8, ease: smoothEase }}
       >
-        <p className="text-xs uppercase tracking-[0.16em] text-[#0B5CFF]" style={{ fontWeight: 900 }}>Exclusive host</p>
-        <p className="mt-1 max-w-[220px] truncate text-lg text-[#172033]" style={{ fontWeight: 900 }}>{hostName}</p>
+        <p className="text-xs uppercase tracking-[0.16em] text-[#0B5CFF] font-black">Exclusive host</p>
+        <p className="mt-1 max-w-[220px] truncate text-lg text-[#172033] font-black">{hostName}</p>
       </motion.div>
     </div>
   );
@@ -433,8 +433,8 @@ export function SubscriptionPackagesScreen() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.48 + index * 0.12, duration: 0.8, ease: smoothEase }}
                   >
-                    <p className="text-xs text-[#0B5CFF]" style={{ fontWeight: 900 }}>{subscriptionPackage.name}</p>
-                    <p className="mt-1 text-2xl text-[#172033]" style={{ fontWeight: 900 }}>{subscriptionPackage.price}</p>
+                    <p className="text-xs text-[#0B5CFF] font-black">{subscriptionPackage.name}</p>
+                    <p className="mt-1 text-2xl text-[#172033] font-black">{subscriptionPackage.price}</p>
                     <p className="mt-1 truncate text-xs text-[#6B7280]">{subscriptionPackage.summary}</p>
                   </motion.button>
                 ))}
@@ -463,15 +463,13 @@ export function SubscriptionPackagesScreen() {
               >
                 <h1
                   aria-hidden="true"
-                  className="invisible text-4xl leading-tight text-[#172033] sm:text-5xl lg:text-6xl"
-                  style={{ fontWeight: 900 }}
+                  className="invisible text-4xl leading-tight text-[#172033] sm:text-5xl lg:text-6xl font-black"
                 >
                   {longestCaption}
                 </h1>
                 <h1
                   aria-live="polite"
-                  className="absolute inset-x-0 top-0 text-4xl leading-tight text-[#172033] sm:text-5xl lg:text-6xl"
-                  style={{ fontWeight: 900 }}
+                  className="absolute inset-x-0 top-0 text-4xl leading-tight text-[#172033] sm:text-5xl lg:text-6xl font-black"
                 >
                   <span>{typedCaption || captions[activeCaptionIndex].slice(0, 1)}</span>
                   <span className="ml-1 inline-block h-[0.82em] w-1 translate-y-1 rounded-full bg-[#0B5CFF] align-baseline animate-pulse" />
@@ -502,7 +500,7 @@ export function SubscriptionPackagesScreen() {
                   return (
                     <div key={item.label} className="rounded-2xl border border-[#E5E9F2] bg-white/80 px-4 py-3 shadow-sm backdrop-blur">
                       <Icon className="mb-2 h-5 w-5 text-[#0B5CFF]" />
-                      <p className="text-sm leading-5 text-[#4B5563]" style={{ fontWeight: 700 }}>{item.label}</p>
+                      <p className="text-sm leading-5 text-[#4B5563] font-bold">{item.label}</p>
                     </div>
                   );
                 })}
@@ -516,7 +514,7 @@ export function SubscriptionPackagesScreen() {
                 <div className="mb-5 grid w-full gap-3 sm:max-w-md sm:grid-cols-[auto_1fr] sm:items-center">
                   <div className="flex items-center gap-3 rounded-2xl border border-[#D8E4FF] bg-white/86 px-4 py-3 shadow-sm backdrop-blur">
                     <UsersRound className="h-5 w-5 text-[#0B5CFF]" />
-                    <span className="text-2xl text-[#172033]" style={{ fontWeight: 900 }}>29,000+</span>
+                    <span className="text-2xl text-[#172033] font-black">29,000+</span>
                   </div>
                   <p className="text-sm leading-6 text-[#4B5563]">
                     subscribed fans use verified access to request private video call scheduling.
@@ -526,10 +524,9 @@ export function SubscriptionPackagesScreen() {
                 <motion.button
                   type="button"
                   onClick={scrollToPackages}
-                  className="premium-cta-glow w-full rounded-full bg-[linear-gradient(135deg,#0B5CFF,#25B7FF)] px-7 py-4 text-white shadow-[0_18px_45px_rgba(11,92,255,0.26)] sm:max-w-md"
+                  className="premium-cta-glow w-full rounded-full bg-[linear-gradient(135deg,#0B5CFF,#25B7FF)] px-7 py-4 text-white shadow-[0_18px_45px_rgba(11,92,255,0.26)] sm:max-w-md font-black"
                   whileHover={{ scale: 1.02, boxShadow: '0 22px 58px rgba(11,92,255,0.32)' }}
                   whileTap={{ scale: 0.98 }}
-                  style={{ fontWeight: 900 }}
                 >
                   View premium packages
                 </motion.button>
@@ -537,14 +534,13 @@ export function SubscriptionPackagesScreen() {
                 <button
                   type="button"
                   onClick={() => navigate(`/subscription/register?${searchParams.toString()}`)}
-                  className="mt-3 w-full rounded-full border border-[#D8E4FF] bg-white/80 px-7 py-3 text-[#0B5CFF] shadow-sm backdrop-blur hover:bg-[#F4F8FF] sm:max-w-md"
-                  style={{ fontWeight: 900 }}
+                  className="mt-3 w-full rounded-full border border-[#D8E4FF] bg-white/80 px-7 py-3 text-[#0B5CFF] shadow-sm backdrop-blur hover:bg-[#F4F8FF] sm:max-w-md font-black"
                 >
                   Continue Verification Chat
                 </button>
 
                 {selectedPackage && (
-                  <p className="mt-4 text-sm text-[#0B5CFF]" style={{ fontWeight: 800 }}>
+                  <p className="mt-4 text-sm text-[#0B5CFF] font-extrabold">
                     Selected: {selectedPackage.name} - {selectedPackage.price}
                   </p>
                 )}
@@ -563,8 +559,8 @@ export function SubscriptionPackagesScreen() {
           >
             <div className="mb-7 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
-                <p className="text-sm uppercase tracking-[0.18em] text-[#0B5CFF]" style={{ fontWeight: 900 }}>Fan membership</p>
-                <h2 className="mt-2 text-3xl text-[#172033]" style={{ fontWeight: 900 }}>{content.availablePackagesTitle}</h2>
+                <p className="text-sm uppercase tracking-[0.18em] text-[#0B5CFF] font-black">Fan membership</p>
+                <h2 className="mt-2 text-3xl text-[#172033] font-black">{content.availablePackagesTitle}</h2>
               </div>
               <p className="max-w-xl text-sm leading-6 text-[#6B7280]">
                 Choose a verified access plan for private booking with {hostName}. Each tier includes a defined subscription window and video call allowance.
@@ -574,8 +570,8 @@ export function SubscriptionPackagesScreen() {
             <div className="mb-8 overflow-hidden rounded-[1.75rem] border border-[#D8E4FF] bg-white shadow-[0_22px_70px_rgba(11,92,255,0.10)]">
               <div className="flex flex-col gap-2 border-b border-[#E5E9F2] p-5 md:flex-row md:items-end md:justify-between lg:p-6">
                 <div>
-                  <p className="text-sm uppercase tracking-[0.18em] text-[#0B5CFF]" style={{ fontWeight: 900 }}>Subscription process</p>
-                  <h3 className="mt-2 text-2xl text-[#172033]" style={{ fontWeight: 900 }}>From package selection to scheduled call</h3>
+                  <p className="text-sm uppercase tracking-[0.18em] text-[#0B5CFF] font-black">Subscription process</p>
+                  <h3 className="mt-2 text-2xl text-[#172033] font-black">From package selection to scheduled call</h3>
                 </div>
                 <p className="max-w-xl text-sm leading-6 text-[#6B7280]">
                   Management confirms payment first, then coordinates the available call schedule for the selected subscription.
@@ -600,11 +596,11 @@ export function SubscriptionPackagesScreen() {
                           <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#E8F1FF] text-[#0B5CFF]">
                             <ActiveProcessIcon className="h-7 w-7" />
                           </span>
-                          <span className="rounded-full bg-[#F4F8FF] px-3 py-1 text-xs text-[#0B5CFF]" style={{ fontWeight: 900 }}>
+                          <span className="rounded-full bg-[#F4F8FF] px-3 py-1 text-xs text-[#0B5CFF] font-black">
                             Step {activeProcessStepIndex + 1} of {subscriptionSteps.length}
                           </span>
                         </div>
-                        <p className="text-2xl text-[#172033]" style={{ fontWeight: 900 }}>{activeProcessStep.title}</p>
+                        <p className="text-2xl text-[#172033] font-black">{activeProcessStep.title}</p>
                         <p className="mt-3 max-w-2xl text-sm leading-7 text-[#4B5563]">{activeProcessStep.text}</p>
                       </div>
 
@@ -675,8 +671,8 @@ export function SubscriptionPackagesScreen() {
                           <Icon className="h-5 w-5" />
                         </span>
                         <span className="min-w-0">
-                          <span className="block text-xs uppercase tracking-[0.14em]" style={{ fontWeight: 900 }}>0{index + 1}</span>
-                          <span className="block truncate text-sm text-[#172033]" style={{ fontWeight: 900 }}>{step.title}</span>
+                          <span className="block text-xs uppercase tracking-[0.14em] font-black">0{index + 1}</span>
+                          <span className="block truncate text-sm text-[#172033] font-black">{step.title}</span>
                         </span>
                       </button>
                     );
@@ -719,18 +715,18 @@ export function SubscriptionPackagesScreen() {
                           }`}>
                             {featured ? <Crown className="h-6 w-6" /> : <BadgeCheck className="h-6 w-6" />}
                           </div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-[#0B5CFF]" style={{ fontWeight: 900 }}>{packageBadge}</p>
-                          <h3 className="mt-2 text-2xl text-[#172033]" style={{ fontWeight: 900 }}>{subscriptionPackage.name}</h3>
+                          <p className="text-xs uppercase tracking-[0.16em] text-[#0B5CFF] font-black">{packageBadge}</p>
+                          <h3 className="mt-2 text-2xl text-[#172033] font-black">{subscriptionPackage.name}</h3>
                         </div>
                         {isSelected && (
-                          <span className="rounded-full bg-[#E8F1FF] px-3 py-1 text-xs text-[#0B5CFF]" style={{ fontWeight: 900 }}>Active</span>
+                          <span className="rounded-full bg-[#E8F1FF] px-3 py-1 text-xs text-[#0B5CFF] font-black">Active</span>
                         )}
                       </div>
 
                       <div className="mb-5 rounded-2xl bg-[linear-gradient(135deg,#FFFFFF,#F2F8FF)] p-4 shadow-inner">
                         <p className="text-sm text-[#6B7280]">{subscriptionPackage.summary}</p>
-                        <p className="mt-3 text-4xl text-[#172033]" style={{ fontWeight: 900 }}>{subscriptionPackage.price}</p>
-                        <p className="mt-2 text-sm text-[#0B5CFF]" style={{ fontWeight: 800 }}>{subscriptionPackage.duration}</p>
+                        <p className="mt-3 text-4xl text-[#172033] font-black">{subscriptionPackage.price}</p>
+                        <p className="mt-2 text-sm text-[#0B5CFF] font-extrabold">{subscriptionPackage.duration}</p>
                       </div>
 
                       <div className="mb-6 space-y-3">
@@ -748,10 +744,9 @@ export function SubscriptionPackagesScreen() {
                           setSelectedPackageId(subscriptionPackage.id);
                           openRegistration(subscriptionPackage.id);
                         }}
-                        className="mt-auto w-full rounded-full bg-[linear-gradient(135deg,#0B5CFF,#25B7FF)] px-5 py-3 text-white shadow-[0_14px_34px_rgba(11,92,255,0.24)]"
+                        className="mt-auto w-full rounded-full bg-[linear-gradient(135deg,#0B5CFF,#25B7FF)] px-5 py-3 text-white shadow-[0_14px_34px_rgba(11,92,255,0.24)] font-black"
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
-                        style={{ fontWeight: 900 }}
                       >
                         {isSelected ? 'Continue with package' : 'Select package'}
                       </motion.button>
@@ -772,8 +767,8 @@ export function SubscriptionPackagesScreen() {
         >
           <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
             <div>
-              <p className="text-sm uppercase tracking-[0.18em] text-[#0B5CFF]" style={{ fontWeight: 900 }}>Booking access</p>
-              <h2 className="mt-2 text-3xl text-[#172033]" style={{ fontWeight: 900 }}>{content.whyTitle}</h2>
+              <p className="text-sm uppercase tracking-[0.18em] text-[#0B5CFF] font-black">Booking access</p>
+              <h2 className="mt-2 text-3xl text-[#172033] font-black">{content.whyTitle}</h2>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {content.whyItems.map((item, index) => (
@@ -816,8 +811,8 @@ export function SubscriptionPackagesScreen() {
         >
           <div className="mb-3 flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.16em] text-[#0B5CFF]" style={{ fontWeight: 900 }}>Sample fan story</p>
-              <p className="mt-1 text-[#172033]" style={{ fontWeight: 900 }}>{activeReview.name}</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-[#0B5CFF] font-black">Sample fan story</p>
+              <p className="mt-1 text-[#172033] font-black">{activeReview.name}</p>
               <p className="text-xs text-[#6B7280]">{activeReview.country} - {activeReview.language}</p>
             </div>
             <button
