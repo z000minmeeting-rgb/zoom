@@ -398,7 +398,7 @@ export function SubscriptionPackagesScreen() {
   const activeReview = mockFanReviews[activeReviewIndex];
 
   return (
-    <div className="w-full bg-white text-[#172033]">
+    <div className="h-dvh w-full overflow-x-hidden overflow-y-auto bg-white text-[#172033] [-webkit-overflow-scrolling:touch]">
       <main className="w-full">
         <section className="relative overflow-hidden bg-white">
           <div className="absolute inset-0 bg-[linear-gradient(135deg,#FFFFFF_0%,#F4F8FF_48%,#EAF7FF_100%)]" />
