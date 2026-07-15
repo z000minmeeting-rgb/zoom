@@ -425,20 +425,10 @@ export function SubscriptionPackagesScreen() {
               <motion.div
                 variants={fadeUp}
                 transition={{ duration: 0.9, ease: smoothEase }}
-                className="relative max-w-4xl"
+                className="max-w-4xl"
               >
-                <h1
-                  aria-hidden="true"
-                  className="invisible text-4xl leading-tight text-[#172033] sm:text-5xl lg:text-6xl font-black"
-                >
-                  {longestCaption}
-                </h1>
-                <h1
-                  aria-live="polite"
-                  className="absolute inset-x-0 top-0 text-4xl leading-tight text-[#172033] sm:text-5xl lg:text-6xl font-black"
-                >
-                  <span>{typedCaption || captions[activeCaptionIndex].slice(0, 1)}</span>
-                  <span className="ml-1 inline-block h-[0.82em] w-1 translate-y-1 rounded-full bg-[#0B5CFF] align-baseline animate-pulse" />
+                <h1 className="text-4xl leading-tight text-[#172033] sm:text-5xl lg:text-6xl font-black">
+                  {formatSubscriptionText(content.titleTemplate || 'Private verified video call access', hostName)}
                 </h1>
               </motion.div>
 

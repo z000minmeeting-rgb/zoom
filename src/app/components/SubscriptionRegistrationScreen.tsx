@@ -20,7 +20,6 @@ const emptyRegistrationForm = {
   fullName: '',
   username: '',
   country: '',
-  dateOfBirth: '',
   email: '',
   phone: '',
   gender: '',
@@ -246,25 +245,6 @@ export function SubscriptionRegistrationScreen() {
               <SubscriberFieldFrame>
                 <input required value={form.country} onChange={(event) => updateForm('country', event.target.value)} placeholder="Country/Location" className={subscriberInputClassName} />
               </SubscriberFieldFrame>
-              <div>
-                <label htmlFor="subscriber-date-of-birth" className="mb-2 block px-1 text-sm text-[#4B5563] font-extrabold">
-                  Date of Birth
-                </label>
-                <SubscriberFieldFrame>
-                  <input
-                    id="subscriber-date-of-birth"
-                    required
-                    type="date"
-                    value={form.dateOfBirth}
-                    onChange={(event) => updateForm('dateOfBirth', event.target.value)}
-                    aria-describedby="subscriber-date-of-birth-help"
-                    className={`${subscriberInputClassName} text-[#6B7280]`}
-                  />
-                </SubscriberFieldFrame>
-                <p id="subscriber-date-of-birth-help" className="mt-2 px-1 text-xs text-[#6B7280]">
-                  Select your date of birth.
-                </p>
-              </div>
               <SubscriberFieldFrame>
                 <input required type="email" value={form.email} onChange={(event) => updateForm('email', event.target.value)} placeholder="Email Address" className={subscriberInputClassName} />
               </SubscriberFieldFrame>
