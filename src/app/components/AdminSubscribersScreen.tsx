@@ -3,12 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MessageSquareText, Search, Trash2, UserRound, X } from 'lucide-react';
 import { WorkspaceTopBar } from './workspace/WorkspaceTopBar';
 import { VERIFICATION_EVENT_NAME, deleteThread, formatStatusColor, readThreads, refreshThreadsFromRemote, VerificationThread } from '../data/verificationChat';
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value));
-}
+import { useLocalization } from '../context/LocalizationContext';
 
 export function AdminSubscribersScreen() {
+  const { formatDate } = useLocalization();
   const navigate = useNavigate();
   const [searchValue, setSearchValue] = useState('');
   const [selectedSubscriber, setSelectedSubscriber] = useState<VerificationThread | null>(null);
@@ -123,7 +121,7 @@ export function AdminSubscribersScreen() {
                 <div className="mt-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <span className={`rounded-full border px-3 py-1 text-xs ${formatStatusColor(thread.status)}`} style={{ fontWeight: 800 }}>{thread.status}</span>
-                    <span className="ml-2 text-xs text-[#8A94A6]">{formatDate(thread.createdAt)}</span>
+                    <span className="ml-2 text-xs text-[#8A94A6]">{formatDate(thread.createdAt, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                   </div>
                   <button
                     type="button"

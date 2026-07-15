@@ -44,7 +44,7 @@ export function ChatPanel({ expanded = false }: ChatPanelProps) {
                   <h3 className="text-[#1F2937] truncate">{chat.name}</h3>
                   <span className="text-xs text-[#6B7280] flex-shrink-0 ml-2">{chat.time}</span>
                 </div>
-                <p className="text-sm text-[#6B7280] truncate">{expanded ? `${chat.message} Let's keep this thread moving.` : chat.message}</p>
+                <p data-no-translate className="text-sm text-[#6B7280] truncate">{expanded ? `${chat.message} Let's keep this thread moving.` : chat.message}</p>
               </div>
               {chat.unread > 0 && (
                 <div className="w-6 h-6 bg-[#0B5CFF] rounded-full flex items-center justify-center flex-shrink-0">

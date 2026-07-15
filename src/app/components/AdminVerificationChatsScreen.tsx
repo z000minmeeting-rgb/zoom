@@ -26,10 +26,8 @@ import {
   refreshThreadsFromRemote,
   updateThread,
 } from '../data/verificationChat';
-
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
-}
+import { useLocalization } from '../context/LocalizationContext';
+import { notifyAdmin } from '../data/adminNotifications';
 
 function latestMessage(thread: VerificationThread) {
   const message = thread.messages[thread.messages.length - 1];
@@ -56,6 +54,7 @@ function getInitials(name: string) {
 }
 
 export function AdminVerificationChatsScreen() {
+  const { formatDate } = useLocalization();
   const navigate = useNavigate();
   const { threadId = '' } = useParams();
   const [threads, setThreads] = useState<VerificationThread[]>(() => readThreads());
@@ -133,6 +132,12 @@ export function AdminVerificationChatsScreen() {
       appointment: appointmentValue.trim(),
     }));
     addMessage(activeThread.id, 'admin', `Your appointment has been scheduled: ${appointmentValue.trim()}`);
+    notifyAdmin('booking_created', {
+      title: 'New Booking Reservation',
+      description: `${activeThread.fullName}: appointment scheduled for ${appointmentValue.trim()}.`,
+      country: activeThread.country,
+      actionUrl: `/admin/chats/${activeThread.id}`,
+    });
     setAppointmentValue('');
   };
 
@@ -337,10 +342,10 @@ export function AdminVerificationChatsScreen() {
                           <p className="truncate text-[#172033]" style={{ fontWeight: 900 }}>{thread.fullName}</p>
                           <p className="truncate text-xs text-[#6B7280]">{thread.email}</p>
                         </div>
-                        <span className="shrink-0 text-xs text-[#8A94A6]">{formatTime(thread.updatedAt)}</span>
+                        <span className="shrink-0 text-xs text-[#8A94A6]">{formatDate(thread.updatedAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
                       </div>
 
-                      <p className="mt-2 line-clamp-2 text-sm text-[#6B7280]">{latestMessage(thread)}</p>
+                      <p data-no-translate className="mt-2 line-clamp-2 text-sm text-[#6B7280]">{latestMessage(thread)}</p>
 
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                         <span className={`rounded-full border px-2.5 py-1 text-[11px] ${formatStatusColor(thread.status)}`} style={{ fontWeight: 800 }}>

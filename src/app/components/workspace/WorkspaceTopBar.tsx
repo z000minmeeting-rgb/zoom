@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Bell, ChevronDown, Search, Trash2, X } from 'lucide-react';
 import { useUser } from '../../context/UserContext';
 import { markThreadSeen, readThreads, refreshThreadsFromRemote, VERIFICATION_EVENT_NAME } from '../../data/verificationChat';
+import { ADMIN_NOTIFICATION_EVENT, readAdminNotifications, type AdminNotification } from '../../data/adminNotifications';
 
 const DISMISSED_NOTIFICATIONS_KEY = 'celebrity-admin-dismissed-notifications-v1';
 
@@ -23,6 +24,7 @@ type WorkspaceTopBarProps = {
 export function WorkspaceTopBar({ leadingContent }: WorkspaceTopBarProps = {}) {
   const { user } = useUser();
   const [threads, setThreads] = useState(() => readThreads());
+  const [adminNotifications, setAdminNotifications] = useState<AdminNotification[]>(() => readAdminNotifications());
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
     try {
@@ -42,15 +44,23 @@ export function WorkspaceTopBar({ leadingContent }: WorkspaceTopBarProps = {}) {
       channel.onmessage = refreshThreads;
     }
 
-    const refreshFromRemote = () => refreshThreadsFromRemote().then(setThreads);
-    const intervalId = window.setInterval(refreshFromRemote, 10000);
-
-    refreshFromRemote();
+    // One initial sync is enough; subsequent updates are delivered through the
+    // verification event/BroadcastChannel rather than a notification poll loop.
+    refreshThreadsFromRemote().then(setThreads);
 
     return () => {
       window.removeEventListener(VERIFICATION_EVENT_NAME, refreshThreads);
       channel?.close();
-      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshNotifications = () => setAdminNotifications(readAdminNotifications());
+    window.addEventListener(ADMIN_NOTIFICATION_EVENT, refreshNotifications);
+    window.addEventListener('storage', refreshNotifications);
+    return () => {
+      window.removeEventListener(ADMIN_NOTIFICATION_EVENT, refreshNotifications);
+      window.removeEventListener('storage', refreshNotifications);
     };
   }, []);
 
@@ -69,7 +79,7 @@ export function WorkspaceTopBar({ leadingContent }: WorkspaceTopBarProps = {}) {
     )).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   ), [dismissedIds, threads]);
 
-  const unreadCount = threads.reduce((total, thread) => total + thread.unreadForAdmin, 0);
+  const unreadCount = threads.reduce((total, thread) => total + thread.unreadForAdmin, 0) + adminNotifications.filter((notification) => !notification.read).length;
 
   const dismissNotification = (notificationId: string) => {
     const nextDismissedIds = [...dismissedIds, notificationId];
@@ -129,7 +139,19 @@ export function WorkspaceTopBar({ leadingContent }: WorkspaceTopBarProps = {}) {
               </div>
 
               <div className="max-h-96 overflow-y-auto">
-                {notifications.length === 0 ? (
+                {adminNotifications.map((notification) => (
+                  <button
+                    key={notification.id}
+                    type="button"
+                    onClick={() => { window.location.href = notification.actionUrl; }}
+                    className="mb-2 w-full rounded-xl bg-[#EEF5FF] p-3 text-left transition-colors hover:bg-[#E3EEFF]"
+                  >
+                    <p className="text-sm text-[#172033]" style={{ fontWeight: 900 }}>{notification.title}</p>
+                    <p className="mt-1 text-xs text-[#4B5563]">{notification.description}</p>
+                    <p className="mt-1 text-xs text-[#6B7280]">{notification.country} · {notification.time}</p>
+                  </button>
+                ))}
+                {notifications.length === 0 && adminNotifications.length === 0 ? (
                   <div className="rounded-xl bg-[#F7F9FC] p-5 text-center text-sm text-[#6B7280]">
                     No message notifications.
                   </div>
@@ -149,7 +171,7 @@ export function WorkspaceTopBar({ leadingContent }: WorkspaceTopBarProps = {}) {
                             {notification.unread && <span className="mr-2 inline-block h-2 w-2 rounded-full bg-[#0B5CFF]" />}
                             {notification.name}
                           </p>
-                          <p className="mt-1 line-clamp-2 text-xs text-[#6B7280]">{notification.text}</p>
+                          <p data-no-translate className="mt-1 line-clamp-2 text-xs text-[#6B7280]">{notification.text}</p>
                         </button>
                         <button
                           type="button"

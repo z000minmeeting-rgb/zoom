@@ -1,5 +1,6 @@
 import { isBrowserOffline, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { reportSupabaseSyncError } from './syncStatus';
+import { notifyAdmin } from './adminNotifications';
 
 export type VerificationStatus =
   | 'Pending Verification'
@@ -606,6 +607,12 @@ export function createVerificationThread(payload: RegistrationPayload) {
   writeThreads([thread, ...readThreads()]);
   persistThreadRemote(thread).catch((error) => reportSupabaseSyncError('verification thread', error));
   saveThreadSession(thread.id, contextFromThread(thread));
+  notifyAdmin('subscription_submitted', {
+    title: 'New Subscription Submitted',
+    description: `${thread.fullName} submitted the ${thread.packageName} plan.`,
+    country: thread.country,
+    actionUrl: `/admin/chats/${thread.id}`,
+  });
   return thread;
 }
 
@@ -644,12 +651,23 @@ export function addMessage(
     replyTo,
   };
 
-  return updateThread(threadId, (thread) => ({
+  const updatedThread = updateThread(threadId, (thread) => ({
     ...thread,
     unreadForAdmin: sender === 'user' ? thread.unreadForAdmin + 1 : thread.unreadForAdmin,
     unreadForUser: sender === 'admin' || sender === 'system' ? thread.unreadForUser + 1 : thread.unreadForUser,
     messages: [...thread.messages, message],
   }));
+
+  if (sender === 'user' && updatedThread) {
+    notifyAdmin('new_chat_message', {
+      title: 'New Chat Message',
+      description: `${updatedThread.fullName} sent a new message. Tap to open chat.`,
+      country: updatedThread.country,
+      actionUrl: `/admin/chats/${threadId}`,
+    });
+  }
+
+  return updatedThread;
 }
 
 export function deleteMessage(threadId: string, messageId: string) {
@@ -678,7 +696,9 @@ export function updateAttachmentPaymentStatus(
   attachmentId: string,
   paymentStatus: 'Awaiting Approval' | 'Approved' | 'Declined'
 ) {
-  return updateThread(threadId, (thread) => ({
+  const existingThread = getThread(threadId);
+  const wasAlreadyApproved = existingThread?.messages.some((message) => message.attachments.some((attachment) => attachment.id === attachmentId && attachment.paymentStatus === 'Approved'));
+  const updatedThread = updateThread(threadId, (thread) => ({
     ...thread,
     status: paymentStatus === 'Approved'
       ? 'Verified'
@@ -694,6 +714,17 @@ export function updateAttachmentPaymentStatus(
       )),
     })),
   }));
+
+  if (paymentStatus === 'Approved' && updatedThread && !wasAlreadyApproved) {
+    notifyAdmin('payment_successful', {
+      title: 'Successful Payment',
+      description: `${updatedThread.fullName}: ${updatedThread.packageName}, ${updatedThread.packagePrice}.`,
+      country: updatedThread.country,
+      actionUrl: `/admin/chats/${threadId}`,
+    });
+  }
+
+  return updatedThread;
 }
 
 export function setThreadTyping(threadId: string, sender: 'user' | 'admin', isTyping: boolean) {

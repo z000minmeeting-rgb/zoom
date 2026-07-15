@@ -1,11 +1,13 @@
 import { ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
+import { useLocalization } from '../context/LocalizationContext';
 import { settingsSections } from '../data/workspaceData';
 
 export function SettingsScreen() {
   const navigate = useNavigate();
   const { user, logout } = useUser();
+  const { language, setLanguage } = useLocalization();
 
   const handleSignOut = () => {
     logout();
@@ -45,6 +47,21 @@ export function SettingsScreen() {
           </div>
 
           <div className="mt-6 bg-white rounded-2xl shadow-sm border border-[#E5E9F2] p-6">
+            <div className="mb-5 flex items-center justify-between gap-4 border-b border-[#E5E9F2] pb-4">
+              <div>
+                <h2 className="text-lg text-[#1F2937]">Language</h2>
+                <p className="mt-1 text-sm text-[#6B7280]">Choose the language used across the application</p>
+              </div>
+              <select
+                value={language}
+                onChange={(event) => setLanguage(event.target.value as 'en' | 'it')}
+                aria-label="Language"
+                className="rounded-xl border border-[#D7DDE8] bg-white px-3 py-2 text-sm text-[#1F2937] outline-none focus:ring-2 focus:ring-[#0B5CFF]"
+              >
+                <option value="en">English</option>
+                <option value="it">Italiano</option>
+              </select>
+            </div>
             <h2 className="text-lg text-[#1F2937] mb-4">Account Information</h2>
             <div className="space-y-4">
               <div className="flex justify-between items-center py-3 border-b border-[#E5E9F2]">

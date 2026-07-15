@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { BadgeCheck, CalendarCheck, CalendarClock, Check, ChevronLeft, ChevronRight, CreditCard, Crown, FileCheck2, ShieldCheck, Sparkles, UsersRound, Video, X } from 'lucide-react';
+import { BadgeCheck, CalendarCheck, CalendarClock, Check, ChevronLeft, ChevronRight, CreditCard, Crown, FileCheck2, ShieldCheck, Sparkles, UsersRound, Video } from 'lucide-react';
 import { formatSubscriptionText, loadSubscriptionContent, refreshSubscriptionContentFromRemote } from '../data/subscriptionPackages';
 import { FloatingVerificationChatButton } from './verification/FloatingVerificationChatButton';
 import { getClientAvatarImage, refreshClientProfilesFromRemote } from '../data/clientProfiles';
@@ -30,8 +30,6 @@ const processSlideVariants = {
 
 const CAPTION_DISPLAY_MS = 8000;
 const CAPTION_TYPE_SPEED_MS = 28;
-const REVIEW_POPUP_INTERVAL_MS = 22000;
-const REVIEW_POPUP_VISIBLE_MS = 15000;
 const PROCESS_STEP_INTERVAL_MS = 6500;
 const LEGACY_PACKAGE_DURATION = 'Every package subscription lasts for 3 months.';
 const TRUST_CLOSING_TEMPLATE = 'Your subscription is handled through a private verification process built for transparency, secure coordination, and reliable scheduling. Once payment is confirmed, our management team will guide the next steps and help arrange a professional, memorable video call experience with "{{hostName}}".';
@@ -63,6 +61,7 @@ const subscriptionSteps = [
     text: 'After payment is verified, management coordinates your available call schedule.',
   },
 ];
+// Kept as content data only. Testimonials are never surfaced automatically.
 const mockFanReviews = [
   {
     name: 'Emily Carter',
@@ -283,8 +282,6 @@ export function SubscriptionPackagesScreen() {
   );
   const [activeCaptionIndex, setActiveCaptionIndex] = useState(0);
   const [typedCaption, setTypedCaption] = useState('');
-  const [activeReviewIndex, setActiveReviewIndex] = useState(0);
-  const [isReviewVisible, setIsReviewVisible] = useState(false);
   const [activeProcessStepIndex, setActiveProcessStepIndex] = useState(0);
   const [processDirection, setProcessDirection] = useState(1);
   const displayPackages = useMemo(() => (
@@ -339,32 +336,6 @@ export function SubscriptionPackagesScreen() {
   }, [activeCaptionIndex, captions]);
 
   useEffect(() => {
-    let hideTimeoutId: number | null = null;
-
-    const showReview = () => {
-      setActiveReviewIndex((currentIndex) => (currentIndex + 1) % mockFanReviews.length);
-      setIsReviewVisible(true);
-
-      if (hideTimeoutId) {
-        window.clearTimeout(hideTimeoutId);
-      }
-
-      hideTimeoutId = window.setTimeout(() => {
-        setIsReviewVisible(false);
-      }, REVIEW_POPUP_VISIBLE_MS);
-    };
-
-    const intervalId = window.setInterval(showReview, REVIEW_POPUP_INTERVAL_MS);
-    return () => {
-      window.clearInterval(intervalId);
-
-      if (hideTimeoutId) {
-        window.clearTimeout(hideTimeoutId);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
     const intervalId = window.setInterval(() => {
       setProcessDirection(1);
       setActiveProcessStepIndex((currentIndex) => (currentIndex + 1) % subscriptionSteps.length);
@@ -394,8 +365,6 @@ export function SubscriptionPackagesScreen() {
     registrationParams.set('packageId', packageId);
     navigate(`/subscription/register?${registrationParams.toString()}`);
   };
-
-  const activeReview = mockFanReviews[activeReviewIndex];
 
   return (
     <div className="h-dvh w-full overflow-x-hidden overflow-y-auto bg-white text-[#172033] [-webkit-overflow-scrolling:touch]">
@@ -799,31 +768,6 @@ export function SubscriptionPackagesScreen() {
           </div>
         </motion.section>
       </main>
-      {isReviewVisible && (
-        <motion.div
-          className="fixed left-4 right-4 top-[calc(env(safe-area-inset-top)+1rem)] z-40 mx-auto max-w-md rounded-[1.5rem] border border-[#D8E4FF] bg-white/95 p-4 shadow-[0_24px_70px_rgba(11,92,255,0.22)] backdrop-blur-xl sm:left-auto sm:right-6 sm:mx-0"
-          initial={{ opacity: 0, y: -24, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -24, scale: 0.96 }}
-        >
-          <div className="mb-3 flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.16em] text-[#0B5CFF] font-black">Sample fan story</p>
-              <p className="mt-1 text-[#172033] font-black">{activeReview.name}</p>
-              <p className="text-xs text-[#6B7280]">{activeReview.country} - {activeReview.language}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsReviewVisible(false)}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#6B7280] hover:bg-[#F4F8FF]"
-              aria-label="Close fan story"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <p className="text-sm leading-6 text-[#4B5563]">{activeReview.text}</p>
-        </motion.div>
-      )}
       {hasGeneratedClientMeetingLink && <FloatingVerificationChatButton />}
     </div>
   );

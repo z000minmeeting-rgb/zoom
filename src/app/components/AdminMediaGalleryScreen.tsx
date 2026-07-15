@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, FileText, Search, X } from 'lucide-react';
 import { WorkspaceTopBar } from './workspace/WorkspaceTopBar';
 import { ChatAttachment, VERIFICATION_EVENT_NAME, readThreads, refreshThreadsFromRemote } from '../data/verificationChat';
+import { useLocalization } from '../context/LocalizationContext';
 
 type GalleryItem = {
   attachment: ChatAttachment;
@@ -24,11 +25,8 @@ function getGalleryItems() {
   ));
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
-}
-
 export function AdminMediaGalleryScreen() {
+  const { formatDate } = useLocalization();
   const navigate = useNavigate();
   const [searchValue, setSearchValue] = useState('');
   const [previewItem, setPreviewItem] = useState<GalleryItem | null>(null);
@@ -114,7 +112,7 @@ export function AdminMediaGalleryScreen() {
                 <div className="p-4">
                   <p className="truncate text-sm text-[#172033]" style={{ fontWeight: 900 }}>{item.attachment.name}</p>
                   <p className="mt-1 truncate text-xs text-[#6B7280]">{item.subscriberName} - {item.packageName}</p>
-                  <p className="mt-2 text-xs text-[#8A94A6]">{formatDate(item.createdAt)}</p>
+                  <p className="mt-2 text-xs text-[#8A94A6]">{formatDate(item.createdAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
                 </div>
               </button>
             ))}
@@ -128,7 +126,7 @@ export function AdminMediaGalleryScreen() {
             <div className="mb-4 flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="truncate text-[#172033]" style={{ fontWeight: 900 }}>{previewItem.attachment.name}</p>
-                <p className="text-sm text-[#6B7280]">{previewItem.subscriberName} - {formatDate(previewItem.createdAt)}</p>
+                <p className="text-sm text-[#6B7280]">{previewItem.subscriberName} - {formatDate(previewItem.createdAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
               </div>
               <button onClick={() => setPreviewItem(null)} className="rounded-full p-2 text-[#6B7280] hover:bg-[#F7F9FC]">
                 <X className="h-5 w-5" />

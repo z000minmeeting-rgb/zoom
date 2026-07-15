@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Settings } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 import { DesktopAuthShell } from './auth/DesktopAuthShell';
+import { notifyAppEntry } from '../data/adminNotifications';
 
 function MobileWelcomeHome() {
   const navigate = useNavigate();
@@ -73,6 +75,10 @@ function MobileWelcomeHome() {
 export function WelcomeScreen() {
   const navigate = useNavigate();
   const { logout } = useUser();
+
+  useEffect(() => {
+    notifyAppEntry();
+  }, []);
 
   const navigateToAuth = (path: '/login' | '/signup') => {
     logout();

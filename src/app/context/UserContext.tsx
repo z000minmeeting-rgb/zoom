@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { notifyAdmin } from '../data/adminNotifications';
 
 type User = {
   fullName: string;
@@ -92,6 +93,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const nextUser = { fullName: matchedUser.fullName, email: matchedUser.email };
       setUser(nextUser);
       persistSession(nextUser);
+      notifyAdmin('user_registration', {
+        title: 'New User Registered',
+        description: `User: ${nextUser.fullName}.`,
+        actionUrl: '/admin/subscribers',
+      });
       return { ok: true };
     },
     register: ({ fullName, email, password }) => {

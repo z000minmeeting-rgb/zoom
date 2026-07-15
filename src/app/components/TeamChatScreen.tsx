@@ -44,7 +44,7 @@ export function TeamChatScreen() {
                     <span className="text-xs text-white">{index % 2 === 0 ? 'SJ' : 'MT'}</span>
                   </div>
                   <div className="flex-1 bg-[#F7F9FC] rounded-2xl rounded-tl-none p-3">
-                    <p className="text-sm text-[#1F2937]">{threadMessage}</p>
+                    <p data-no-translate className="text-sm text-[#1F2937]">{threadMessage}</p>
                   </div>
                 </div>
               ))}

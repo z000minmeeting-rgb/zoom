@@ -18,6 +18,7 @@ import {
   updateThread,
   VerificationThread,
 } from '../../data/verificationChat';
+import { useLocalization } from '../../context/LocalizationContext';
 
 type VerificationChatPanelProps = {
   threadId: string;
@@ -25,25 +26,25 @@ type VerificationChatPanelProps = {
   compact?: boolean;
 };
 
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(value));
+function formatTime(value: string, language: 'en' | 'it') {
+  return new Intl.DateTimeFormat(language === 'it' ? 'it-IT' : 'en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 }
 
-function formatDateGroup(value: string) {
+function formatDateGroup(value: string, language: 'en' | 'it') {
   const date = new Date(value);
   const today = new Date();
   const yesterday = new Date();
   yesterday.setDate(today.getDate() - 1);
 
   if (date.toDateString() === today.toDateString()) {
-    return 'Today';
+    return language === 'it' ? 'Oggi' : 'Today';
   }
 
   if (date.toDateString() === yesterday.toDateString()) {
-    return 'Yesterday';
+    return language === 'it' ? 'Ieri' : 'Yesterday';
   }
 
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+  return new Intl.DateTimeFormat(language === 'it' ? 'it-IT' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 }
 
 function formatSize(size: number) {
@@ -236,6 +237,7 @@ function AttachmentPreview({
 }
 
 export function VerificationChatPanel({ threadId, viewer, compact = false }: VerificationChatPanelProps) {
+  const { language, t } = useLocalization();
   const [thread, setThread] = useState<VerificationThread | null>(() => getThread(threadId));
   const [messageText, setMessageText] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -297,7 +299,7 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
     const groups: Array<{ label: string; messages: ChatMessage[] }> = [];
 
     thread?.messages.forEach((message) => {
-      const label = formatDateGroup(message.createdAt);
+      const label = formatDateGroup(message.createdAt, language);
       const existingGroup = groups.find((group) => group.label === label);
 
       if (existingGroup) {
@@ -308,7 +310,7 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
     });
 
     return groups;
-  }, [thread?.messages]);
+  }, [thread?.messages, language]);
 
   const handleTyping = (value: string) => {
     setMessageText(value);
@@ -438,7 +440,7 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
                         </div>
                       )}
 
-                      {message.text && <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.text}</p>}
+                      {message.text && <p data-no-translate={message.sender !== 'system' ? '' : undefined} className="whitespace-pre-wrap break-words text-sm leading-6">{message.sender === 'system' ? t(message.text) : message.text}</p>}
                       {message.attachments.map((attachment) => (
                         <AttachmentPreview
                           key={attachment.id}
@@ -452,7 +454,7 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
 
                     {!isSystem && (
                       <div className={`mt-1 flex items-center gap-2 text-xs text-[#8A94A6] ${isMine ? 'justify-end' : 'justify-start'}`}>
-                        <span>{formatTime(message.createdAt)}</span>
+                        <span>{formatTime(message.createdAt, language)}</span>
                         {isMine && <MessageReceipt status={message.status} />}
                         <button
                           type="button"

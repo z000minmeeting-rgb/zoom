@@ -23,6 +23,7 @@ import { Sidebar } from './components/Sidebar';
 import { AIAssistantPanel } from './components/AIAssistantPanel';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { UserProvider, useUser } from './context/UserContext';
+import { LocalizationProvider } from './context/LocalizationContext';
 import { AdminAuthProvider, useAdminAuth } from './context/AdminAuthContext';
 import { PlaceholderWorkspaceScreen } from './components/workspace/PlaceholderWorkspaceScreen';
 
@@ -105,8 +106,9 @@ function MeetingLinkRedirect() {
 
 export default function App() {
   return (
-    <UserProvider>
-      <AdminAuthProvider>
+    <LocalizationProvider>
+      <UserProvider>
+        <AdminAuthProvider>
         <BrowserRouter>
           <AppLayout>
             <Routes>
@@ -142,7 +144,8 @@ export default function App() {
             </Routes>
           </AppLayout>
         </BrowserRouter>
-      </AdminAuthProvider>
-    </UserProvider>
+        </AdminAuthProvider>
+      </UserProvider>
+    </LocalizationProvider>
   );
 }
