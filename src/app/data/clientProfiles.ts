@@ -1,5 +1,7 @@
 import { isBrowserOffline, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { reportSupabaseSyncError } from './syncStatus';
+import { deleteThread, readThreads } from './verificationChat';
+import { ADMIN_NOTIFICATION_EVENT, ADMIN_NOTIFICATIONS_KEY, readAdminNotifications } from './adminNotifications';
 
 export type ClientProfile = {
   id: string;
@@ -201,4 +203,32 @@ export function getClientAvatarImage(clientId: string) {
   }
 
   return readClients().find((client) => client.id === clientId)?.avatarImage || '';
+}
+
+export async function deleteClientProfile(clientId: string) {
+  const relatedThreads = readThreads().filter((thread) => thread.clientId === clientId);
+  relatedThreads.forEach((thread) => deleteThread(thread.id));
+  writeClientsLocal(readClients().filter((client) => client.id !== clientId));
+
+  const relatedThreadIds = new Set(relatedThreads.map((thread) => thread.id));
+  const notifications = readAdminNotifications().filter((notification) => (
+    !Array.from(relatedThreadIds).some((threadId) => notification.actionUrl.includes(`/admin/chats/${threadId}`))
+  ));
+  window.localStorage.setItem(ADMIN_NOTIFICATIONS_KEY, JSON.stringify(notifications));
+  window.dispatchEvent(new CustomEvent(ADMIN_NOTIFICATION_EVENT));
+
+  const email = readClients().find((client) => client.id === clientId)?.email.toLowerCase();
+  if (email) {
+    const users = JSON.parse(window.localStorage.getItem('zoom-workspace-users-v2') || '[]') as Array<{ email?: string }>;
+    window.localStorage.setItem('zoom-workspace-users-v2', JSON.stringify(users.filter((user) => user.email?.toLowerCase() !== email)));
+    const session = JSON.parse(window.localStorage.getItem('zoom-workspace-session-v2') || 'null') as { email?: string } | null;
+    if (session?.email?.toLowerCase() === email) window.localStorage.removeItem('zoom-workspace-session-v2');
+  }
+
+  if (isSupabaseConfigured && supabase) {
+    const { error } = await supabase.from('client_profiles').delete().eq('id', clientId);
+    if (error) throw error;
+  }
+
+  return relatedThreads.length;
 }

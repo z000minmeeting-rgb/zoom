@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Bell, ChevronDown, Search, Trash2, X } from 'lucide-react';
 import { useUser } from '../../context/UserContext';
 import { markThreadSeen, readThreads, refreshThreadsFromRemote, VERIFICATION_EVENT_NAME } from '../../data/verificationChat';
-import { ADMIN_NOTIFICATION_EVENT, readAdminNotifications, type AdminNotification } from '../../data/adminNotifications';
+import { ADMIN_NOTIFICATION_EVENT, markAdminNotificationRead, markAllAdminNotificationsRead, readAdminNotifications, type AdminNotification } from '../../data/adminNotifications';
 
 const DISMISSED_NOTIFICATIONS_KEY = 'celebrity-admin-dismissed-notifications-v1';
 
@@ -89,6 +89,13 @@ export function WorkspaceTopBar({ leadingContent }: WorkspaceTopBarProps = {}) {
 
   const markAllAsRead = () => {
     threads.forEach((thread) => markThreadSeen(thread.id, 'admin'));
+    setThreads(readThreads());
+    setAdminNotifications(markAllAdminNotificationsRead());
+  };
+
+  const openAdminNotification = (notification: AdminNotification) => {
+    setAdminNotifications(markAdminNotificationRead(notification.id));
+    window.location.href = notification.actionUrl;
   };
 
   return (
@@ -143,7 +150,7 @@ export function WorkspaceTopBar({ leadingContent }: WorkspaceTopBarProps = {}) {
                   <button
                     key={notification.id}
                     type="button"
-                    onClick={() => { window.location.href = notification.actionUrl; }}
+                    onClick={() => openAdminNotification(notification)}
                     className="mb-2 w-full rounded-xl bg-[#EEF5FF] p-3 text-left transition-colors hover:bg-[#E3EEFF]"
                   >
                     <p className="text-sm text-[#172033]" style={{ fontWeight: 900 }}>{notification.title}</p>

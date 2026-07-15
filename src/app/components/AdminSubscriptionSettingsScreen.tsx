@@ -11,6 +11,7 @@ import {
   resetSubscriptionContent,
   saveSubscriptionContent,
 } from '../data/subscriptionPackages';
+import { disablePushNotifications, enablePushNotifications, getPushRegistrationState, type PushRegistrationState } from '../data/adminPushSettings';
 
 function toLines(items: string[]) {
   return items.join('\n');
@@ -49,6 +50,8 @@ export function AdminSubscriptionSettingsScreen() {
   const navigate = useNavigate();
   const [content, setContent] = useState<SubscriptionPageContent>(() => loadSubscriptionContent());
   const [saveStatus, setSaveStatus] = useState('');
+  const [pushState, setPushState] = useState<PushRegistrationState>(() => getPushRegistrationState());
+  const [pushStatus, setPushStatus] = useState('');
 
   useEffect(() => {
     refreshSubscriptionContentFromRemote().then(setContent);
@@ -103,6 +106,27 @@ export function AdminSubscriptionSettingsScreen() {
     setSaveStatus('Default subscription content restored.');
   };
 
+  const refreshPushRegistration = () => {
+    setPushState(getPushRegistrationState());
+    setPushStatus('Registration status refreshed.');
+  };
+
+  const enablePush = async () => {
+    try {
+      setPushState(await enablePushNotifications());
+      setPushStatus('Push notifications are enabled on this device.');
+    } catch (error) {
+      setPushState(getPushRegistrationState());
+      setPushStatus(error instanceof Error ? error.message : 'Unable to enable push notifications.');
+    }
+  };
+
+  const disablePush = async () => {
+    await disablePushNotifications();
+    setPushState(getPushRegistrationState());
+    setPushStatus('Push notifications are disabled on this device.');
+  };
+
   return (
     <div className="relative flex h-dvh min-w-0 flex-1 flex-col overflow-hidden bg-[#F7F9FC]">
       <div className="sticky top-0 z-20 shrink-0 bg-white">
@@ -152,6 +176,21 @@ export function AdminSubscriptionSettingsScreen() {
               {saveStatus}
             </div>
           )}
+
+          <section className="mb-6 rounded-2xl border border-[#E5E9F2] bg-white p-5 shadow-sm lg:p-6">
+            <h2 className="text-xl text-[#1F2937]" style={{ fontWeight: 700 }}>Admin Push Notifications</h2>
+            <div className="mt-4 grid grid-cols-1 gap-4 text-sm md:grid-cols-3">
+              <div><p className="text-[#6B7280]">Status</p><p className="mt-1 text-[#172033]">{pushState.active ? 'Active on this device' : 'Not active'}</p></div>
+              <div><p className="text-[#6B7280]">Notification Permission</p><p className="mt-1 text-[#172033]">{pushState.permission}</p></div>
+              <div><p className="text-[#6B7280]">Current Device</p><p className="mt-1 text-[#172033]">{pushState.supported ? 'Push supported' : 'Push unsupported'}</p></div>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button type="button" onClick={enablePush} className="rounded-xl bg-[#0B5CFF] px-4 py-3 text-sm text-white hover:bg-[#0056D2]">Enable on this Device</button>
+              <button type="button" onClick={disablePush} className="rounded-xl border border-[#FEE4E2] bg-white px-4 py-3 text-sm text-[#B42318] hover:bg-[#FFF5F4]">Disable Notifications</button>
+              <button type="button" onClick={refreshPushRegistration} className="rounded-xl border border-[#D6DCE8] bg-white px-4 py-3 text-sm text-[#4B5563] hover:bg-[#F7F9FC]">Refresh Registration</button>
+            </div>
+            {pushStatus && <p className="mt-4 text-sm text-[#157347]">{pushStatus}</p>}
+          </section>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.95fr_1.05fr]">
             <section className="rounded-2xl border border-[#E5E9F2] bg-white p-5 shadow-sm lg:p-6">

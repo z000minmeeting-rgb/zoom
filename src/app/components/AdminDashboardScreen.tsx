@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useAdminAuth } from '../context/AdminAuthContext';
 import { ArrowLeft, Copy, ImageUp, Link, MessageSquareText, Plus, Settings, Trash2, UserRound, UsersRound, Video, X } from 'lucide-react';
 import { WorkspaceTopBar } from './workspace/WorkspaceTopBar';
 import { VERIFICATION_EVENT_NAME, deleteThread, formatStatusColor, readThreads, refreshThreadsFromRemote, VerificationThread } from '../data/verificationChat';
@@ -12,6 +13,7 @@ import {
   readClients,
   refreshClientProfilesFromRemote,
   saveClientProfiles,
+  deleteClientProfile,
 } from '../data/clientProfiles';
 import { SUPABASE_SYNC_ERROR_EVENT_NAME, SupabaseSyncErrorDetail } from '../data/syncStatus';
 
@@ -31,6 +33,7 @@ function buildMeetingLink(client: ClientProfile) {
 
 export function AdminDashboardScreen() {
   const navigate = useNavigate();
+  const { isAdminAuthenticated } = useAdminAuth();
   const { clientId } = useParams();
   const [clients, setClients] = useState<ClientProfile[]>(() => readClients());
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
@@ -45,6 +48,7 @@ export function AdminDashboardScreen() {
   const [selectedSubscriber, setSelectedSubscriber] = useState<VerificationThread | null>(null);
   const [threads, setThreads] = useState<VerificationThread[]>(() => readThreads());
   const [syncError, setSyncError] = useState('');
+  const [deleteStatus, setDeleteStatus] = useState('');
 
   const activeClient = useMemo(
     () => clients.find((client) => client.id === clientId) || null,
@@ -229,6 +233,22 @@ export function AdminDashboardScreen() {
     const nextThreads = deleteThread(subscriber.id);
     setThreads(nextThreads);
     setSelectedSubscriber(null);
+  };
+
+  const handleDeleteClient = async (client: ClientProfile) => {
+    if (!isAdminAuthenticated) {
+      setDeleteStatus('Administrator authentication is required to delete a client.');
+      return;
+    }
+    if (!window.confirm(`Delete Client?\n\nThis action cannot be undone.\n\nDelete ${client.name} and all related client data?`)) return;
+    try {
+      await deleteClientProfile(client.id);
+      setClients(readClients());
+      setDeleteStatus(`${client.name} was deleted successfully.`);
+      navigate('/admin');
+    } catch (error) {
+      setDeleteStatus(error instanceof Error ? error.message : 'Unable to delete this client.');
+    }
   };
 
   const actionMenu = (
@@ -424,18 +444,28 @@ export function AdminDashboardScreen() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedMeetingClientId(activeClient.id);
-              resetGeneratedLink();
-              setIsMeetingModalOpen(true);
-            }}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0B5CFF] px-5 py-3 text-white hover:bg-[#0056D2]"
-          >
-            <Video className="h-5 w-5" />
-            Generate meeting link
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedMeetingClientId(activeClient.id);
+                resetGeneratedLink();
+                setIsMeetingModalOpen(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0B5CFF] px-5 py-3 text-white hover:bg-[#0056D2]"
+            >
+              <Video className="h-5 w-5" />
+              Generate meeting link
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteClient(activeClient)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#FEE4E2] bg-white px-5 py-3 text-[#B42318] hover:bg-[#FFF5F4]"
+            >
+              <Trash2 className="h-5 w-5" />
+              Delete client
+            </button>
+          </div>
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -738,6 +768,12 @@ export function AdminDashboardScreen() {
             <button type="button" onClick={() => setSyncError('')} className="shrink-0 rounded-full p-1 hover:bg-white/70" aria-label="Dismiss sync error">
               <X className="h-4 w-4" />
             </button>
+          </div>
+        )}
+        {deleteStatus && (
+          <div className="mx-auto mb-5 flex max-w-7xl items-center justify-between gap-4 rounded-2xl border border-[#BFE7D1] bg-[#EEFBF4] p-4 text-sm text-[#157347]">
+            <p>{deleteStatus}</p>
+            <button type="button" onClick={() => setDeleteStatus('')} className="rounded-full p-1 hover:bg-white/70" aria-label="Dismiss status"><X className="h-4 w-4" /></button>
           </div>
         )}
         {activeClient ? clientDetailPage : dashboardPage}

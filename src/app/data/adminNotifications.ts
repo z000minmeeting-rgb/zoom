@@ -64,6 +64,25 @@ export function createAdminNotification(notification: Omit<AdminNotification, 'i
   return next;
 }
 
+function persistAdminNotifications(notifications: AdminNotification[]) {
+  window.localStorage.setItem(ADMIN_NOTIFICATIONS_KEY, JSON.stringify(notifications));
+  window.dispatchEvent(new CustomEvent(ADMIN_NOTIFICATION_EVENT));
+}
+
+export function markAdminNotificationRead(notificationId: string) {
+  const notifications = readAdminNotifications().map((notification) => (
+    notification.id === notificationId ? { ...notification, read: true } : notification
+  ));
+  persistAdminNotifications(notifications);
+  return notifications;
+}
+
+export function markAllAdminNotificationsRead() {
+  const notifications = readAdminNotifications().map((notification) => ({ ...notification, read: true }));
+  persistAdminNotifications(notifications);
+  return notifications;
+}
+
 export function notifyAppEntry() {
   if (window.sessionStorage.getItem(APP_ENTRY_SESSION_KEY)) return;
   window.sessionStorage.setItem(APP_ENTRY_SESSION_KEY, 'true');
