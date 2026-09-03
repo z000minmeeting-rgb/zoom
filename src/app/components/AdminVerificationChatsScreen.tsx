@@ -60,6 +60,10 @@ export function AdminVerificationChatsScreen() {
   const [threads, setThreads] = useState<VerificationThread[]>(() => readThreads());
   const [searchValue, setSearchValue] = useState('');
   const [appointmentValue, setAppointmentValue] = useState('');
+  const [appointmentTimezone, setAppointmentTimezone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  );
+  const [scheduleError, setScheduleError] = useState('');
 
   useEffect(() => {
     const refreshThreads = () => setThreads(readThreads());
@@ -112,33 +116,72 @@ export function AdminVerificationChatsScreen() {
     navigate(`/admin/chats/${thread.id}`);
   };
 
-  const setStatus = (status: VerificationStatus, message: string) => {
+  // Sequential, not concurrent: addMessage() re-reads the thread cache and
+  // rewrites the whole row, so firing it alongside the status update lets the
+  // stale copy win and silently revert the decision.
+  const setStatus = async (status: VerificationStatus, message: string) => {
     if (!activeThread) {
       return;
     }
 
-    updateThread(activeThread.id, (thread) => ({ ...thread, status }));
-    addMessage(activeThread.id, 'admin', message);
+    try {
+      await updateThread(activeThread.id, (thread) => ({ ...thread, status }));
+      await addMessage(activeThread.id, 'admin', message);
+    } catch (error) {
+      setScheduleError(error instanceof Error ? error.message : 'Unable to update this booking.');
+    }
   };
 
-  const scheduleAppointment = () => {
+  const paymentConfirmed = Boolean(activeThread) && (
+    activeThread!.status === 'Verified'
+    || activeThread!.status === 'Appointment Scheduled'
+    || activeThread!.messages.some((message) => (
+      message.attachments.some((attachment) => attachment.paymentStatus === 'Approved')
+    ))
+  );
+
+  /**
+   * The scheduled-call email is sent by a database trigger once this update
+   * commits, and only when payment has actually been confirmed. The same gate
+   * is enforced server-side; this check exists so the reason is visible here
+   * rather than showing as a silently missing email.
+   */
+  const scheduleAppointment = async () => {
     if (!activeThread || !appointmentValue.trim()) {
       return;
     }
 
-    updateThread(activeThread.id, (thread) => ({
-      ...thread,
-      status: 'Appointment Scheduled',
-      appointment: appointmentValue.trim(),
-    }));
-    addMessage(activeThread.id, 'admin', `Your appointment has been scheduled: ${appointmentValue.trim()}`);
-    notifyAdmin('booking_created', {
-      title: 'New Booking Reservation',
-      description: `${activeThread.fullName}: appointment scheduled for ${appointmentValue.trim()}.`,
-      country: activeThread.country,
-      actionUrl: `/admin/chats/${activeThread.id}`,
-    });
-    setAppointmentValue('');
+    if (!paymentConfirmed) {
+      setScheduleError('Confirm the payment before scheduling. The customer is only emailed a confirmed session.');
+      return;
+    }
+
+    setScheduleError('');
+    const appointment = appointmentValue.trim();
+    const timezone = appointmentTimezone.trim() || 'UTC';
+
+    try {
+      await updateThread(activeThread.id, (thread) => ({
+        ...thread,
+        status: 'Appointment Scheduled',
+        appointment,
+        appointmentTimezone: timezone,
+      }));
+      await addMessage(
+        activeThread.id,
+        'admin',
+        `Your appointment has been scheduled: ${appointment} (${timezone})`,
+      );
+      notifyAdmin('booking_created', {
+        title: 'New Booking Reservation',
+        description: `${activeThread.fullName}: appointment scheduled for ${appointment} (${timezone}).`,
+        country: activeThread.country,
+        actionUrl: `/admin/chats/${activeThread.id}`,
+      }).catch(() => undefined);
+      setAppointmentValue('');
+    } catch (error) {
+      setScheduleError(error instanceof Error ? error.message : 'Unable to save this appointment.');
+    }
   };
 
   if (threadId) {
@@ -224,14 +267,44 @@ export function AdminVerificationChatsScreen() {
               <p className="text-sm text-[#155EEF]" style={{ fontWeight: 900 }}>Schedule appointment</p>
               <input
                 value={appointmentValue}
-                onChange={(event) => setAppointmentValue(event.target.value)}
-                placeholder="Date, time, or schedule note"
+                onChange={(event) => {
+                  setAppointmentValue(event.target.value);
+                  setScheduleError('');
+                }}
+                placeholder="Date and time, e.g. 14 Mar 2026, 15:00"
                 className="mt-3 w-full rounded-2xl border border-[#C7D7FE] bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5CFF]"
               />
+              <label className="mt-2 block">
+                <span className="sr-only">Timezone</span>
+                <input
+                  value={appointmentTimezone}
+                  onChange={(event) => setAppointmentTimezone(event.target.value)}
+                  placeholder="Timezone, e.g. Europe/Rome"
+                  className="w-full rounded-2xl border border-[#C7D7FE] bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B5CFF]"
+                />
+              </label>
+              <p className="mt-2 text-xs leading-5 text-[#155EEF]">
+                The timezone is stated in the customer&apos;s confirmation email. Defaults to this device&apos;s zone.
+              </p>
+
+              {!paymentConfirmed && (
+                <p className="mt-3 rounded-xl bg-white px-3 py-2 text-xs leading-5 text-[#A16207]">
+                  Payment is not confirmed yet. Approve the payment proof first — a session email is only sent for a
+                  confirmed booking.
+                </p>
+              )}
+
+              {scheduleError && (
+                <p role="alert" className="mt-3 rounded-xl bg-[#FFF5F4] px-3 py-2 text-xs leading-5 text-[#B42318]">
+                  {scheduleError}
+                </p>
+              )}
+
               <button
                 type="button"
                 onClick={scheduleAppointment}
-                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0B5CFF] px-4 py-3 text-sm text-white"
+                disabled={!paymentConfirmed || !appointmentValue.trim()}
+                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0B5CFF] px-4 py-3 text-sm text-white disabled:bg-[#B6C2D6]"
               >
                 <CalendarCheck className="h-4 w-4" />
                 Schedule

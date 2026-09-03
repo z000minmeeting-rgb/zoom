@@ -51,15 +51,18 @@ export function AdminSubscribersScreen() {
     ));
   }, [searchValue, threads]);
 
-  const handleDeleteSubscriber = (subscriber: VerificationThread) => {
+  const handleDeleteSubscriber = async (subscriber: VerificationThread) => {
     const shouldDelete = window.confirm(`Delete ${subscriber.fullName} and their verification chat history?`);
 
     if (!shouldDelete) {
       return;
     }
 
-    const nextThreads = deleteThread(subscriber.id);
-    setThreads(nextThreads);
+    try {
+      setThreads(await deleteThread(subscriber.id));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Unable to delete subscriber.');
+    }
 
     if (selectedSubscriber?.id === subscriber.id) {
       setSelectedSubscriber(null);

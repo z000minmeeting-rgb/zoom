@@ -1,5 +1,7 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { reportSupabaseSyncError } from './syncStatus';
+import { readCloudCache, writeCloudCache } from './adminCache';
+import { requireAdminWorkspace } from './adminWorkspace';
 
 export type SubscriptionPackage = {
   id: string;
@@ -153,21 +155,25 @@ function dispatchSubscriptionEvent() {
 }
 
 function writeSubscriptionContentLocal(content: SubscriptionPageContent) {
-  window.localStorage.setItem(SUBSCRIPTION_CONTENT_KEY, JSON.stringify(content));
+  writeCloudCache('subscription-content', content);
   dispatchSubscriptionEvent();
 }
 
 async function saveSubscriptionContentRemote(content: SubscriptionPageContent) {
   if (!isSupabaseConfigured || !supabase) {
-    return;
+    throw new Error('Supabase is not configured.');
   }
+  const workspace = await requireAdminWorkspace();
 
   const { error } = await supabase
     .from('subscription_content')
     .upsert({
-      id: 'default',
+      // The legacy table keyed content as a global "default" row. A workspace
+      // ID avoids colliding with preserved pre-migration global content.
+      id: workspace.id,
       content,
       updated_at: new Date().toISOString(),
+      admin_account_id: workspace.id,
     }, { onConflict: 'id' });
 
   if (error) {
@@ -176,6 +182,11 @@ async function saveSubscriptionContentRemote(content: SubscriptionPageContent) {
 }
 
 export function loadSubscriptionContent(): SubscriptionPageContent {
+  return readCloudCache('subscription-content', cloneContent(defaultSubscriptionContent));
+}
+
+/** Used only by the legacy importer. */
+export function loadLegacySubscriptionContent(): SubscriptionPageContent {
   if (typeof window === 'undefined') {
     return cloneContent(defaultSubscriptionContent);
   }
@@ -190,29 +201,43 @@ export function loadSubscriptionContent(): SubscriptionPageContent {
     const parsedContent = JSON.parse(rawContent) as Partial<SubscriptionPageContent>;
     return normalizeLoadedContent(parsedContent);
   } catch {
-    window.localStorage.removeItem(SUBSCRIPTION_CONTENT_KEY);
     return cloneContent(defaultSubscriptionContent);
   }
 }
 
-export function saveSubscriptionContent(content: SubscriptionPageContent) {
-  writeSubscriptionContentLocal(content);
-  saveSubscriptionContentRemote(content).catch((error) => reportSupabaseSyncError('subscription content', error));
+export async function saveSubscriptionContent(content: SubscriptionPageContent) {
+  try {
+    await saveSubscriptionContentRemote(content);
+    writeSubscriptionContentLocal(content);
+  } catch (error) {
+    reportSupabaseSyncError('subscription content', error);
+    throw error;
+  }
 }
 
 export async function refreshSubscriptionContentFromRemote() {
   if (!isSupabaseConfigured || !supabase) {
+    throw new Error('Supabase is not configured.');
+  }
+  let workspace;
+  try {
+    workspace = await requireAdminWorkspace();
+  } catch {
     return loadSubscriptionContent();
   }
 
   const { data, error } = await supabase
     .from('subscription_content')
     .select('content')
-    .eq('id', 'default')
+    .eq('id', workspace.id)
+    .eq('admin_account_id', workspace.id)
     .maybeSingle();
 
   if (error || !data?.content) {
-    return loadSubscriptionContent();
+    if (error) throw error;
+    const fallback = cloneContent(defaultSubscriptionContent);
+    writeSubscriptionContentLocal(fallback);
+    return fallback;
   }
 
   const content = normalizeLoadedContent(data.content as Partial<SubscriptionPageContent>);
@@ -220,9 +245,9 @@ export async function refreshSubscriptionContentFromRemote() {
   return content;
 }
 
-export function resetSubscriptionContent() {
+export async function resetSubscriptionContent() {
   const defaultContent = cloneContent(defaultSubscriptionContent);
-  saveSubscriptionContent(defaultContent);
+  await saveSubscriptionContent(defaultContent);
   return defaultContent;
 }
 

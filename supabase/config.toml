@@ -1,0 +1,22 @@
+# Edge Function deployment settings.
+#
+# The two public endpoints are reachable without a Supabase Auth session,
+# because customers have no accounts by product design. They are not
+# unauthenticated in any meaningful sense: `public-booking` validates every
+# field server-side and is rate limited, and `guest-chat` authorises each call
+# against a hashed, scoped, expiring guest token.
+#
+# `dispatch-emails` also skips JWT verification because pg_cron calls it through
+# pg_net, which cannot mint one. It is protected by the OUTBOX_DRAIN_SECRET
+# header instead.
+
+project_id = "zoo"
+
+[functions.public-booking]
+verify_jwt = false
+
+[functions.guest-chat]
+verify_jwt = false
+
+[functions.dispatch-emails]
+verify_jwt = false

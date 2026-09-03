@@ -93,17 +93,25 @@ export function AdminSubscriptionSettingsScreen() {
     setSaveStatus('');
   };
 
-  const handleSave = (event: React.FormEvent) => {
+  const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
     const nextContent = normalizeContent(content);
-    saveSubscriptionContent(nextContent);
-    setContent(nextContent);
-    setSaveStatus('Subscription package page saved.');
+    try {
+      await saveSubscriptionContent(nextContent);
+      setContent(nextContent);
+      setSaveStatus('Subscription package page saved.');
+    } catch (error) {
+      setSaveStatus(error instanceof Error ? error.message : 'Unable to save subscription content.');
+    }
   };
 
-  const handleReset = () => {
-    setContent(resetSubscriptionContent());
-    setSaveStatus('Default subscription content restored.');
+  const handleReset = async () => {
+    try {
+      setContent(await resetSubscriptionContent());
+      setSaveStatus('Default subscription content restored.');
+    } catch (error) {
+      setSaveStatus(error instanceof Error ? error.message : 'Unable to reset subscription content.');
+    }
   };
 
   const refreshPushRegistration = () => {

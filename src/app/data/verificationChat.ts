@@ -1,6 +1,8 @@
 import { isBrowserOffline, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { reportSupabaseSyncError } from './syncStatus';
 import { notifyAdmin } from './adminNotifications';
+import { readCloudCache, writeCloudCache } from './adminCache';
+import { requireAdminWorkspace } from './adminWorkspace';
 
 export type VerificationStatus =
   | 'Pending Verification'
@@ -55,8 +57,14 @@ export type VerificationThread = {
   hostInitials: string;
   clientId: string;
   meetingLinkToken: string;
+  bookingReference: string;
   status: VerificationStatus;
   appointment: string;
+  /**
+   * IANA zone the appointment is expressed in. The scheduled-call email states
+   * it explicitly, because "3pm" without a zone is not an appointment.
+   */
+  appointmentTimezone: string;
   createdAt: string;
   updatedAt: string;
   unreadForAdmin: number;
@@ -108,8 +116,10 @@ type VerificationThreadRow = {
   host_initials: string;
   client_id: string | null;
   meeting_link_token?: string | null;
+  booking_reference?: string | null;
   status: VerificationStatus;
   appointment: string;
+  appointment_timezone?: string | null;
   unread_for_admin: number;
   unread_for_user: number;
   typing_user: boolean;
@@ -117,6 +127,7 @@ type VerificationThreadRow = {
   onboarding_auto_reply_sent: boolean;
   created_at: string;
   updated_at: string;
+  admin_account_id: string;
 };
 
 type VerificationMessageRow = {
@@ -127,6 +138,7 @@ type VerificationMessageRow = {
   status: ChatMessage['status'];
   reply_to: ChatReply | null;
   created_at: string;
+  admin_account_id: string;
 };
 
 type VerificationAttachmentRow = {
@@ -140,6 +152,7 @@ type VerificationAttachmentRow = {
   payment_status: ChatAttachment['paymentStatus'] | null;
   payment_status_updated_at: string | null;
   created_at: string;
+  admin_account_id: string;
 };
 
 export const VERIFICATION_THREADS_KEY = 'celebrity-verification-threads-v1';
@@ -152,7 +165,6 @@ const LEGACY_ADMIN_WELCOME_PATTERN = /^Welcome .+\. Thank you for registering fo
 const LEGACY_PAYMENT_PROOF_SYSTEM_MESSAGE =
   'Payment proof submitted successfully. Please wait 20-40 minutes while our management team verifies your payment and schedules your appointment.';
 
-let hasAttemptedThreadBackfill = false;
 
 function createId(_prefix: string) {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -227,6 +239,11 @@ function isUuid(value: string) {
 }
 
 export function readThreads(): VerificationThread[] {
+  return readCloudCache<VerificationThread[]>('threads', []);
+}
+
+/** Legacy storage is deliberately isolated for the one-time per-device importer. */
+export function readLegacyThreads(): VerificationThread[] {
   if (typeof window === 'undefined') {
     return [];
   }
@@ -260,13 +277,14 @@ export function readThreads(): VerificationThread[] {
       };
     });
   } catch {
-    window.localStorage.removeItem(VERIFICATION_THREADS_KEY);
+    // Preserve corrupt legacy input for manual recovery; never destroy a
+    // migration source merely because this browser cannot parse it.
     return [];
   }
 }
 
 export function writeThreads(threads: VerificationThread[]) {
-  window.localStorage.setItem(VERIFICATION_THREADS_KEY, JSON.stringify(threads));
+  writeCloudCache('threads', threads);
   window.dispatchEvent(new CustomEvent(VERIFICATION_EVENT_NAME));
 
   if ('BroadcastChannel' in window) {
@@ -276,7 +294,7 @@ export function writeThreads(threads: VerificationThread[]) {
   }
 }
 
-function threadToRow(thread: VerificationThread): VerificationThreadRow {
+function threadToRow(thread: VerificationThread, adminAccountId: string): VerificationThreadRow {
   return {
     id: thread.id,
     full_name: thread.fullName,
@@ -294,8 +312,11 @@ function threadToRow(thread: VerificationThread): VerificationThreadRow {
     host_initials: thread.hostInitials,
     client_id: thread.clientId || null,
     meeting_link_token: thread.meetingLinkToken || null,
+    // booking_reference is assigned by a database trigger and is never written
+    // back from the browser.
     status: thread.status,
     appointment: thread.appointment,
+    appointment_timezone: thread.appointmentTimezone || '',
     unread_for_admin: thread.unreadForAdmin,
     unread_for_user: thread.unreadForUser,
     typing_user: thread.typingUser,
@@ -303,10 +324,11 @@ function threadToRow(thread: VerificationThread): VerificationThreadRow {
     onboarding_auto_reply_sent: Boolean(thread.onboardingAutoReplySent),
     created_at: thread.createdAt,
     updated_at: thread.updatedAt,
+    admin_account_id: adminAccountId,
   };
 }
 
-function messageToRow(message: ChatMessage): VerificationMessageRow {
+function messageToRow(message: ChatMessage, adminAccountId: string): VerificationMessageRow {
   return {
     id: message.id,
     thread_id: message.threadId,
@@ -315,10 +337,11 @@ function messageToRow(message: ChatMessage): VerificationMessageRow {
     status: message.status,
     reply_to: message.replyTo || null,
     created_at: message.createdAt,
+    admin_account_id: adminAccountId,
   };
 }
 
-function attachmentToRow(attachment: ChatAttachment, messageId: string, threadId: string): VerificationAttachmentRow {
+function attachmentToRow(attachment: ChatAttachment, messageId: string, threadId: string, adminAccountId: string): VerificationAttachmentRow {
   return {
     id: attachment.id,
     message_id: messageId,
@@ -330,6 +353,7 @@ function attachmentToRow(attachment: ChatAttachment, messageId: string, threadId
     payment_status: attachment.paymentStatus || null,
     payment_status_updated_at: attachment.paymentStatusUpdatedAt || null,
     created_at: attachment.paymentStatusUpdatedAt || new Date().toISOString(),
+    admin_account_id: adminAccountId,
   };
 }
 
@@ -388,8 +412,10 @@ function rowsToThreads(
     hostInitials: thread.host_initials,
     clientId: thread.client_id || '',
     meetingLinkToken: thread.meeting_link_token || '',
+    bookingReference: thread.booking_reference || '',
     status: thread.status,
     appointment: thread.appointment,
+    appointmentTimezone: thread.appointment_timezone || '',
     createdAt: thread.created_at,
     updatedAt: thread.updated_at,
     unreadForAdmin: thread.unread_for_admin,
@@ -422,40 +448,22 @@ function mergeThreads(localThreads: VerificationThread[], remoteThreads: Verific
     .sort((first, second) => threadUpdateTime(second) - threadUpdateTime(first));
 }
 
-function shouldBackfillLocalThreads(localThreads: VerificationThread[], remoteThreads: VerificationThread[]) {
-  const remoteThreadsById = new Map(remoteThreads.map((thread) => [thread.id, thread]));
-
-  return localThreads.some((localThread) => {
-    const remoteThread = remoteThreadsById.get(localThread.id);
-    return !remoteThread || threadUpdateTime(localThread) > threadUpdateTime(remoteThread);
-  });
-}
-
-function backfillLocalThreads(localThreads: VerificationThread[], remoteThreads: VerificationThread[]) {
-  if (hasAttemptedThreadBackfill || localThreads.length === 0 || !shouldBackfillLocalThreads(localThreads, remoteThreads)) {
-    return;
-  }
-
-  hasAttemptedThreadBackfill = true;
-  Promise.all(localThreads.map((thread) => persistThreadRemote(thread)))
-    .catch((error) => reportSupabaseSyncError('local verification backfill', error));
-}
-
-async function persistThreadRemote(thread: VerificationThread) {
+export async function persistThreadRemote(thread: VerificationThread) {
   if (!isSupabaseConfigured || !supabase || !isUuid(thread.id)) {
-    return;
+    throw new Error('Supabase is not configured or the record has no stable UUID.');
   }
+  const workspace = await requireAdminWorkspace();
 
-  const messageRows = thread.messages.filter((message) => isUuid(message.id)).map(messageToRow);
+  const messageRows = thread.messages.filter((message) => isUuid(message.id)).map((message) => messageToRow(message, workspace.id));
   const attachmentRows = thread.messages.flatMap((message) => (
     isUuid(message.id)
-      ? message.attachments.filter((attachment) => isUuid(attachment.id)).map((attachment) => attachmentToRow(attachment, message.id, thread.id))
+      ? message.attachments.filter((attachment) => isUuid(attachment.id)).map((attachment) => attachmentToRow(attachment, message.id, thread.id, workspace.id))
       : []
   ));
 
   const { error: threadError } = await supabase
     .from('verification_threads')
-    .upsert(threadToRow(thread), { onConflict: 'id' });
+    .upsert(threadToRow(thread, workspace.id), { onConflict: 'id' });
 
   if (threadError) {
     throw threadError;
@@ -487,7 +495,9 @@ async function deleteThreadRemote(threadId: string) {
     return;
   }
 
-  await supabase.from('verification_threads').delete().eq('id', threadId);
+  const workspace = await requireAdminWorkspace();
+  const { error } = await supabase.from('verification_threads').delete().eq('id', threadId).eq('admin_account_id', workspace.id);
+  if (error) throw error;
 }
 
 async function deleteMessageRemote(messageId: string) {
@@ -495,41 +505,50 @@ async function deleteMessageRemote(messageId: string) {
     return;
   }
 
-  await supabase.from('verification_messages').delete().eq('id', messageId);
+  const workspace = await requireAdminWorkspace();
+  const { error } = await supabase.from('verification_messages').delete().eq('id', messageId).eq('admin_account_id', workspace.id);
+  if (error) throw error;
 }
 
 export async function refreshThreadsFromRemote() {
   if (!isSupabaseConfigured || !supabase || isBrowserOffline()) {
+    throw new Error('Cloud verification data is unavailable while Supabase is offline or unconfigured.');
+  }
+  let workspace;
+  try {
+    workspace = await requireAdminWorkspace();
+  } catch {
     return readThreads();
   }
-
-  const localThreads = readThreads();
 
   const { data: threadRows, error: threadError } = await supabase
     .from('verification_threads')
     .select('*')
+    .eq('admin_account_id', workspace.id)
     .order('updated_at', { ascending: false });
 
   if (threadError || !threadRows) {
-    return readThreads();
+    throw threadError || new Error('Unable to load verification threads.');
   }
 
   const threadIds = (threadRows as VerificationThreadRow[]).map((thread) => thread.id);
 
   if (threadIds.length === 0) {
-    backfillLocalThreads(localThreads, []);
-    return localThreads;
+    writeThreads([]);
+    return [];
   }
 
   const [{ data: messageRows }, { data: attachmentRows }] = await Promise.all([
     supabase
       .from('verification_messages')
       .select('*')
+      .eq('admin_account_id', workspace.id)
       .in('thread_id', threadIds)
       .order('created_at', { ascending: true }),
     supabase
       .from('verification_attachments')
       .select('*')
+      .eq('admin_account_id', workspace.id)
       .in('thread_id', threadIds)
       .order('created_at', { ascending: true }),
   ]);
@@ -539,9 +558,8 @@ export async function refreshThreadsFromRemote() {
     (messageRows || []) as VerificationMessageRow[],
     (attachmentRows || []) as VerificationAttachmentRow[]
   );
-  const threads = mergeThreads(localThreads, remoteThreads);
+  const threads = remoteThreads;
   writeThreads(threads);
-  backfillLocalThreads(localThreads, remoteThreads);
   return threads;
 }
 
@@ -574,15 +592,25 @@ export function getSavedThreadSession(context?: ThreadAccessContext) {
   return '';
 }
 
-export function createVerificationThread(payload: RegistrationPayload) {
+/**
+ * Admin-side thread creation.
+ *
+ * Guest bookings do NOT come through here — a visitor has no admin workspace,
+ * so `persistThreadRemote` would throw. Public registrations go to the
+ * `public-booking` Edge Function (see src/app/data/publicBooking.ts), which is
+ * also what makes the booking emails fire from a committed database row.
+ */
+export async function createVerificationThread(payload: RegistrationPayload) {
   const now = new Date().toISOString();
   const openingMessage = `Hello Management, I am interested in completing payment verification for the ${payload.packageName} plan (${payload.packagePrice}) with ${payload.hostName}. Please guide me through the payment confirmation process.`;
   const thread: VerificationThread = {
     id: createId('thread'),
     ...payload,
     meetingLinkToken: payload.meetingLinkToken || '',
+    bookingReference: '',
     status: 'Pending Verification',
     appointment: '',
+    appointmentTimezone: '',
     createdAt: now,
     updatedAt: now,
     unreadForAdmin: 1,
@@ -604,36 +632,41 @@ export function createVerificationThread(payload: RegistrationPayload) {
   };
 
   thread.messages = thread.messages.map((message) => ({ ...message, threadId: thread.id }));
+  await persistThreadRemote(thread);
   writeThreads([thread, ...readThreads()]);
-  persistThreadRemote(thread).catch((error) => reportSupabaseSyncError('verification thread', error));
   saveThreadSession(thread.id, contextFromThread(thread));
   notifyAdmin('subscription_submitted', {
     title: 'New Subscription Submitted',
     description: `${thread.fullName} submitted the ${thread.packageName} plan.`,
     country: thread.country,
     actionUrl: `/admin/chats/${thread.id}`,
-  });
+  }).catch((error) => reportSupabaseSyncError('admin notification', error));
   return thread;
 }
 
-export function updateThread(threadId: string, updater: (thread: VerificationThread) => VerificationThread) {
+export async function updateThread(threadId: string, updater: (thread: VerificationThread) => VerificationThread) {
   const threads = readThreads();
   const nextThreads = threads.map((thread) => (
     thread.id === threadId
       ? { ...updater(thread), updatedAt: new Date().toISOString() }
       : thread
   ));
-  writeThreads(nextThreads);
   const updatedThread = nextThreads.find((thread) => thread.id === threadId) || null;
 
   if (updatedThread) {
-    persistThreadRemote(updatedThread).catch((error) => reportSupabaseSyncError('verification thread', error));
+    try {
+      await persistThreadRemote(updatedThread);
+      writeThreads(nextThreads);
+    } catch (error) {
+      reportSupabaseSyncError('verification thread', error);
+      throw error;
+    }
   }
 
   return updatedThread;
 }
 
-export function addMessage(
+export async function addMessage(
   threadId: string,
   sender: ChatSender,
   text: string,
@@ -651,7 +684,7 @@ export function addMessage(
     replyTo,
   };
 
-  const updatedThread = updateThread(threadId, (thread) => ({
+  const updatedThread = await updateThread(threadId, (thread) => ({
     ...thread,
     unreadForAdmin: sender === 'user' ? thread.unreadForAdmin + 1 : thread.unreadForAdmin,
     unreadForUser: sender === 'admin' || sender === 'system' ? thread.unreadForUser + 1 : thread.unreadForUser,
@@ -664,25 +697,24 @@ export function addMessage(
       description: `${updatedThread.fullName} sent a new message. Tap to open chat.`,
       country: updatedThread.country,
       actionUrl: `/admin/chats/${threadId}`,
-    });
+    }).catch((error) => reportSupabaseSyncError('admin notification', error));
   }
 
   return updatedThread;
 }
 
-export function deleteMessage(threadId: string, messageId: string) {
-  deleteMessageRemote(messageId).catch((error) => reportSupabaseSyncError('verification message delete', error));
-
+export async function deleteMessage(threadId: string, messageId: string) {
+  await deleteMessageRemote(messageId);
   return updateThread(threadId, (thread) => ({
     ...thread,
     messages: thread.messages.filter((message) => message.id !== messageId),
   }));
 }
 
-export function deleteThread(threadId: string) {
+export async function deleteThread(threadId: string) {
   const nextThreads = readThreads().filter((thread) => thread.id !== threadId);
+  await deleteThreadRemote(threadId);
   writeThreads(nextThreads);
-  deleteThreadRemote(threadId).catch((error) => reportSupabaseSyncError('verification thread delete', error));
 
   if (getSavedThreadSession() === threadId) {
     window.localStorage.removeItem(VERIFICATION_SESSION_KEY);
@@ -691,14 +723,14 @@ export function deleteThread(threadId: string) {
   return nextThreads;
 }
 
-export function updateAttachmentPaymentStatus(
+export async function updateAttachmentPaymentStatus(
   threadId: string,
   attachmentId: string,
   paymentStatus: 'Awaiting Approval' | 'Approved' | 'Declined'
 ) {
   const existingThread = getThread(threadId);
   const wasAlreadyApproved = existingThread?.messages.some((message) => message.attachments.some((attachment) => attachment.id === attachmentId && attachment.paymentStatus === 'Approved'));
-  const updatedThread = updateThread(threadId, (thread) => ({
+  const updatedThread = await updateThread(threadId, (thread) => ({
     ...thread,
     status: paymentStatus === 'Approved'
       ? 'Verified'
@@ -721,13 +753,13 @@ export function updateAttachmentPaymentStatus(
       description: `${updatedThread.fullName}: ${updatedThread.packageName}, ${updatedThread.packagePrice}.`,
       country: updatedThread.country,
       actionUrl: `/admin/chats/${threadId}`,
-    });
+    }).catch((error) => reportSupabaseSyncError('admin notification', error));
   }
 
   return updatedThread;
 }
 
-export function setThreadTyping(threadId: string, sender: 'user' | 'admin', isTyping: boolean) {
+export async function setThreadTyping(threadId: string, sender: 'user' | 'admin', isTyping: boolean) {
   return updateThread(threadId, (thread) => ({
     ...thread,
     typingUser: sender === 'user' ? isTyping : thread.typingUser,
@@ -735,7 +767,7 @@ export function setThreadTyping(threadId: string, sender: 'user' | 'admin', isTy
   }));
 }
 
-export function markThreadSeen(threadId: string, viewer: 'user' | 'admin') {
+export async function markThreadSeen(threadId: string, viewer: 'user' | 'admin') {
   return updateThread(threadId, (thread) => ({
     ...thread,
     unreadForAdmin: viewer === 'admin' ? 0 : thread.unreadForAdmin,

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAdminAuth } from '../context/AdminAuthContext';
-import { ArrowLeft, Copy, ImageUp, Link, MessageSquareText, Plus, Settings, Trash2, UserRound, UsersRound, Video, X } from 'lucide-react';
+import { ArrowLeft, Copy, ImageUp, Link, MailCheck, MessageSquareText, Plus, Settings, Trash2, UserRound, UsersRound, Video, X } from 'lucide-react';
 import { WorkspaceTopBar } from './workspace/WorkspaceTopBar';
 import { VERIFICATION_EVENT_NAME, deleteThread, formatStatusColor, readThreads, refreshThreadsFromRemote, VerificationThread } from '../data/verificationChat';
 import {
@@ -120,9 +120,9 @@ export function AdminDashboardScreen() {
     };
   }, []);
 
-  const persistClients = (nextClients: ClientProfile[]) => {
+  const persistClients = async (nextClients: ClientProfile[]) => {
+    await saveClientProfiles(nextClients);
     setClients(nextClients);
-    saveClientProfiles(nextClients);
   };
 
   const resetGeneratedLink = () => {
@@ -130,7 +130,7 @@ export function AdminDashboardScreen() {
     setCopyLabel('Copy');
   };
 
-  const handleCreateClient = (event: React.FormEvent) => {
+  const handleCreateClient = async (event: React.FormEvent) => {
     event.preventDefault();
     const trimmedName = clientName.trim();
 
@@ -149,7 +149,12 @@ export function AdminDashboardScreen() {
       updatedAt: now,
     };
 
-    persistClients([nextClient, ...clients]);
+    try {
+      await persistClients([nextClient, ...clients]);
+    } catch (error) {
+      setDeleteStatus(error instanceof Error ? error.message : 'Unable to save this client.');
+      return;
+    }
     setSelectedMeetingClientId(nextClient.id);
     setClientName('');
     setClientCategory('');
@@ -209,7 +214,7 @@ export function AdminDashboardScreen() {
         currentClient.id === client.id
           ? { ...currentClient, avatarImage: reader.result as string, updatedAt: new Date().toISOString() }
           : currentClient
-      )));
+      ))).catch((error) => setDeleteStatus(error instanceof Error ? error.message : 'Unable to save client image.'));
     };
 
     reader.readAsDataURL(file);
@@ -220,19 +225,23 @@ export function AdminDashboardScreen() {
       currentClient.id === client.id
         ? { ...currentClient, avatarImage: undefined, updatedAt: new Date().toISOString() }
         : currentClient
-    )));
+    ))).catch((error) => setDeleteStatus(error instanceof Error ? error.message : 'Unable to save client image.'));
   };
 
-  const handleDeleteSubscriber = (subscriber: VerificationThread) => {
+  const handleDeleteSubscriber = async (subscriber: VerificationThread) => {
     const shouldDelete = window.confirm(`Delete ${subscriber.fullName} and their verification chat history?`);
 
     if (!shouldDelete) {
       return;
     }
 
-    const nextThreads = deleteThread(subscriber.id);
-    setThreads(nextThreads);
-    setSelectedSubscriber(null);
+    try {
+      const nextThreads = await deleteThread(subscriber.id);
+      setThreads(nextThreads);
+      setSelectedSubscriber(null);
+    } catch (error) {
+      setDeleteStatus(error instanceof Error ? error.message : 'Unable to delete subscriber.');
+    }
   };
 
   const handleDeleteClient = async (client: ClientProfile) => {
@@ -616,6 +625,14 @@ export function AdminDashboardScreen() {
         >
           <Settings className="h-5 w-5 text-[#0B5CFF]" />
           Subscription settings
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/admin/email')}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D6DCE8] bg-white px-5 py-3 text-[#1F2937] shadow-sm hover:bg-[#F7F9FC]"
+        >
+          <MailCheck className="h-5 w-5 text-[#0B5CFF]" />
+          Email delivery
         </button>
         <button
           type="button"

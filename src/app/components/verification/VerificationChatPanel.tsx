@@ -19,11 +19,25 @@ import {
   VerificationThread,
 } from '../../data/verificationChat';
 import { useLocalization } from '../../context/LocalizationContext';
+import {
+  loadGuestThread,
+  markGuestThreadSeen,
+  sendGuestMessage,
+  setGuestTyping,
+} from '../../data/guestChat';
 
 type VerificationChatPanelProps = {
   threadId: string;
   viewer: 'user' | 'admin';
   compact?: boolean;
+  /**
+   * Present for a customer. When set, every read and write goes through the
+   * guest-chat Edge Function instead of the admin-scoped data module, which a
+   * visitor has no authorization to use.
+   */
+  guestToken?: string;
+  /** Lets the host screen stay in sync with what the panel loaded. */
+  onGuestThreadLoaded?: (thread: VerificationThread) => void;
 };
 
 function formatTime(value: string, language: 'en' | 'it') {
@@ -236,20 +250,61 @@ function AttachmentPreview({
   );
 }
 
-export function VerificationChatPanel({ threadId, viewer, compact = false }: VerificationChatPanelProps) {
+export function VerificationChatPanel({
+  threadId,
+  viewer,
+  compact = false,
+  guestToken = '',
+  onGuestThreadLoaded,
+}: VerificationChatPanelProps) {
   const { language, t } = useLocalization();
-  const [thread, setThread] = useState<VerificationThread | null>(() => getThread(threadId));
+  const isGuest = Boolean(guestToken);
+  const [thread, setThread] = useState<VerificationThread | null>(() => (isGuest ? null : getThread(threadId)));
   const [messageText, setMessageText] = useState('');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [replyTo, setReplyTo] = useState<ChatReply | undefined>();
   const [isUploading, setIsUploading] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState('');
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<number | null>(null);
+  const guestLoadedRef = useRef(onGuestThreadLoaded);
+  guestLoadedRef.current = onGuestThreadLoaded;
 
   const oppositeTyping = viewer === 'user' ? thread?.typingAdmin : thread?.typingUser;
   const oppositeTypingText = viewer === 'user' ? 'Management is typing...' : 'User is typing...';
 
+  // Guest polling. A customer has no Realtime subscription and no admin cache,
+  // so the panel refreshes from its own authorized endpoint.
   useEffect(() => {
+    if (!isGuest) {
+      return;
+    }
+
+    let active = true;
+
+    const refreshFromGuestApi = () => loadGuestThread(guestToken)
+      .then((nextThread) => {
+        if (!active) return;
+        setThread(nextThread);
+        guestLoadedRef.current?.(nextThread);
+      })
+      .catch(() => undefined);
+
+    const intervalId = window.setInterval(refreshFromGuestApi, 5000);
+    refreshFromGuestApi();
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [guestToken, isGuest]);
+
+  useEffect(() => {
+    if (isGuest) {
+      return;
+    }
+
     const refreshThread = () => {
       setThread(getThread(threadId));
     };
@@ -275,7 +330,7 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
       channel?.close();
       window.clearInterval(intervalId);
     };
-  }, [threadId]);
+  }, [threadId, isGuest]);
 
   useEffect(() => {
     if (!thread) {
@@ -286,10 +341,17 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
       ? thread.unreadForAdmin > 0 || thread.messages.some((message) => message.sender === 'user' && message.status !== 'Seen')
       : thread.unreadForUser > 0 || thread.messages.some((message) => message.sender === 'admin' && message.status !== 'Seen');
 
-    if (hasUnreadMessages) {
-      markThreadSeen(threadId, viewer);
+    if (!hasUnreadMessages) {
+      return;
     }
-  }, [threadId, viewer, thread]);
+
+    if (isGuest) {
+      markGuestThreadSeen(guestToken).catch(() => undefined);
+      return;
+    }
+
+    markThreadSeen(threadId, viewer);
+  }, [threadId, viewer, thread, isGuest, guestToken]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -312,16 +374,25 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
     return groups;
   }, [thread?.messages, language]);
 
+  const publishTyping = (isTyping: boolean) => {
+    if (isGuest) {
+      setGuestTyping(guestToken, isTyping).catch(() => undefined);
+      return;
+    }
+
+    setThreadTyping(threadId, viewer, isTyping);
+  };
+
   const handleTyping = (value: string) => {
     setMessageText(value);
-    setThreadTyping(threadId, viewer, true);
+    publishTyping(true);
 
     if (typingTimeoutRef.current) {
       window.clearTimeout(typingTimeoutRef.current);
     }
 
     typingTimeoutRef.current = window.setTimeout(() => {
-      setThreadTyping(threadId, viewer, false);
+      publishTyping(false);
     }, 1200);
   };
 
@@ -340,12 +411,15 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
     }
   };
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     const trimmedMessage = messageText.trim();
 
-    if (!trimmedMessage && attachments.length === 0) {
+    if ((!trimmedMessage && attachments.length === 0) || isSending) {
       return;
     }
+
+    setSendError('');
+    setIsSending(true);
 
     const sentWithAttachments = attachments.length > 0;
     const outgoingAttachments = viewer === 'user'
@@ -355,21 +429,37 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
         }))
       : attachments;
 
-    addMessage(threadId, viewer, trimmedMessage, outgoingAttachments, replyTo);
+    try {
+      if (isGuest) {
+        // One persisted message. The admin email is a database-trigger
+        // consequence of this insert, so reconnects, reloads and extra tabs
+        // cannot multiply it.
+        await sendGuestMessage(guestToken, trimmedMessage, outgoingAttachments, replyTo);
+        const nextThread = await loadGuestThread(guestToken);
+        setThread(nextThread);
+        guestLoadedRef.current?.(nextThread);
+      } else {
+        await addMessage(threadId, viewer, trimmedMessage, outgoingAttachments, replyTo);
 
-    if (viewer === 'user' && sentWithAttachments) {
-      updateThread(threadId, (currentThread) => ({
-        ...currentThread,
-        status: currentThread.status === 'Verified' || currentThread.status === 'Appointment Scheduled'
-          ? currentThread.status
-          : 'Under Review',
-      }));
+        if (viewer === 'user' && sentWithAttachments) {
+          await updateThread(threadId, (currentThread) => ({
+            ...currentThread,
+            status: currentThread.status === 'Verified' || currentThread.status === 'Appointment Scheduled'
+              ? currentThread.status
+              : 'Under Review',
+          }));
+        }
+      }
+
+      setMessageText('');
+      setAttachments([]);
+      setReplyTo(undefined);
+      publishTyping(false);
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : 'Unable to send your message. Please try again.');
+    } finally {
+      setIsSending(false);
     }
-
-    setMessageText('');
-    setAttachments([]);
-    setReplyTo(undefined);
-    setThreadTyping(threadId, viewer, false);
   };
 
   if (!thread) {
@@ -494,6 +584,12 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
       </div>
 
       <div className="border-t border-[#E5E9F2] bg-white/95 p-3 sm:p-4">
+        {sendError && (
+          <p role="alert" className="mb-3 rounded-2xl border border-[#FEE4E2] bg-[#FFF5F4] px-4 py-3 text-sm text-[#B42318]">
+            {sendError}
+          </p>
+        )}
+
         {replyTo && (
           <div className="mb-3 flex items-start gap-3 rounded-2xl border border-[#D8E4FF] bg-[#F4F8FF] px-4 py-3">
             <Reply className="mt-0.5 h-4 w-4 shrink-0 text-[#0B5CFF]" />
@@ -561,7 +657,7 @@ export function VerificationChatPanel({ threadId, viewer, compact = false }: Ver
           <button
             type="button"
             onClick={sendMessage}
-            disabled={isUploading || (!messageText.trim() && attachments.length === 0)}
+            disabled={isUploading || isSending || (!messageText.trim() && attachments.length === 0)}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#0B5CFF] text-white shadow-[0_12px_30px_rgba(11,92,255,0.22)] disabled:bg-[#B6C2D6]"
           >
             <Send className="h-5 w-5" />

@@ -1,7 +1,8 @@
 import { isBrowserOffline, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { reportSupabaseSyncError } from './syncStatus';
 import { deleteThread, readThreads } from './verificationChat';
-import { ADMIN_NOTIFICATION_EVENT, ADMIN_NOTIFICATIONS_KEY, readAdminNotifications } from './adminNotifications';
+import { readCloudCache, writeCloudCache } from './adminCache';
+import { requireAdminWorkspace } from './adminWorkspace';
 
 export type ClientProfile = {
   id: string;
@@ -23,13 +24,13 @@ type ClientProfileRow = {
   avatar_image_path: string | null;
   created_at?: string;
   updated_at?: string;
+  admin_account_id: string;
 };
 
 export const CLIENTS_KEY = 'zoom-admin-clients-v1';
 export const CLIENTS_EVENT_NAME = 'zoom-admin-clients-updated';
 export const avatarColors = ['#0B5CFF', '#7C3AED', '#059669', '#DC6803', '#D92D20', '#155EEF'];
 
-let hasAttemptedClientBackfill = false;
 
 export function createClientId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -62,7 +63,7 @@ function rowToClient(row: ClientProfileRow): ClientProfile {
   };
 }
 
-function clientToRow(client: ClientProfile): ClientProfileRow {
+function clientToRow(client: ClientProfile, adminAccountId: string): ClientProfileRow {
   return {
     id: client.id,
     name: client.name,
@@ -72,6 +73,7 @@ function clientToRow(client: ClientProfile): ClientProfileRow {
     avatar_image_path: client.avatarImage || null,
     created_at: client.createdAt,
     updated_at: client.updatedAt || new Date().toISOString(),
+    admin_account_id: adminAccountId,
   };
 }
 
@@ -103,24 +105,6 @@ function mergeClients(localClients: ClientProfile[], remoteClients: ClientProfil
   return sortClients(Array.from(clientsById.values()));
 }
 
-function shouldBackfillLocalClients(localClients: ClientProfile[], remoteClients: ClientProfile[]) {
-  const remoteClientsById = new Map(remoteClients.map((client) => [client.id, client]));
-
-  return localClients.some((localClient) => {
-    const remoteClient = remoteClientsById.get(localClient.id);
-    return !remoteClient || clientUpdateTime(localClient) > clientUpdateTime(remoteClient);
-  });
-}
-
-function backfillLocalClients(localClients: ClientProfile[], remoteClients: ClientProfile[]) {
-  if (hasAttemptedClientBackfill || localClients.length === 0 || !shouldBackfillLocalClients(localClients, remoteClients)) {
-    return;
-  }
-
-  hasAttemptedClientBackfill = true;
-  saveClientsRemote(mergeClients(localClients, remoteClients))
-    .catch((error) => reportSupabaseSyncError('local client backfill', error));
-}
 
 function dispatchClientEvent() {
   window.dispatchEvent(new CustomEvent(CLIENTS_EVENT_NAME));
@@ -133,6 +117,11 @@ function dispatchClientEvent() {
 }
 
 export function readClients(): ClientProfile[] {
+  return readCloudCache<ClientProfile[]>('clients', []);
+}
+
+/** Used only by the legacy importer; never by normal admin reads. */
+export function readLegacyClients(): ClientProfile[] {
   if (typeof window === 'undefined') {
     return [];
   }
@@ -146,54 +135,63 @@ export function readClients(): ClientProfile[] {
   try {
     return sortClients(JSON.parse(rawClients) as ClientProfile[]);
   } catch {
-    window.localStorage.removeItem(CLIENTS_KEY);
     return [];
   }
 }
 
 function writeClientsLocal(clients: ClientProfile[]) {
-  window.localStorage.setItem(CLIENTS_KEY, JSON.stringify(clients));
+  writeCloudCache('clients', clients);
   dispatchClientEvent();
 }
 
 async function saveClientsRemote(clients: ClientProfile[]) {
   if (!isSupabaseConfigured || !supabase) {
-    return;
+    throw new Error('Supabase is not configured.');
   }
+  const workspace = await requireAdminWorkspace();
 
   const { error } = await supabase
     .from('client_profiles')
-    .upsert(clients.map(clientToRow), { onConflict: 'id' });
+    .upsert(clients.map((client) => clientToRow(client, workspace.id)), { onConflict: 'id' });
 
   if (error) {
     throw error;
   }
 }
 
-export function saveClientProfiles(clients: ClientProfile[]) {
-  writeClientsLocal(clients);
-  saveClientsRemote(clients).catch((error) => reportSupabaseSyncError('client profiles', error));
+export async function saveClientProfiles(clients: ClientProfile[]) {
+  try {
+    await saveClientsRemote(clients);
+    writeClientsLocal(clients);
+  } catch (error) {
+    reportSupabaseSyncError('client profiles', error);
+    throw error;
+  }
 }
 
 export async function refreshClientProfilesFromRemote() {
   if (!isSupabaseConfigured || !supabase || isBrowserOffline()) {
+    throw new Error('Cloud client data is unavailable while Supabase is offline or unconfigured.');
+  }
+  let workspace;
+  try {
+    workspace = await requireAdminWorkspace();
+  } catch {
     return readClients();
   }
 
   const { data, error } = await supabase
     .from('client_profiles')
     .select('*')
+    .eq('admin_account_id', workspace.id)
     .order('created_at', { ascending: false });
 
   if (error || !data) {
-    return readClients();
+    throw error || new Error('Unable to load client profiles.');
   }
-
-  const localClients = readClients();
   const remoteClients = (data as ClientProfileRow[]).map(rowToClient);
-  const clients = mergeClients(localClients, remoteClients);
+  const clients = sortClients(remoteClients);
   writeClientsLocal(clients);
-  backfillLocalClients(localClients, remoteClients);
   return clients;
 }
 
@@ -207,26 +205,12 @@ export function getClientAvatarImage(clientId: string) {
 
 export async function deleteClientProfile(clientId: string) {
   const relatedThreads = readThreads().filter((thread) => thread.clientId === clientId);
-  relatedThreads.forEach((thread) => deleteThread(thread.id));
+  await Promise.all(relatedThreads.map((thread) => deleteThread(thread.id)));
   writeClientsLocal(readClients().filter((client) => client.id !== clientId));
 
-  const relatedThreadIds = new Set(relatedThreads.map((thread) => thread.id));
-  const notifications = readAdminNotifications().filter((notification) => (
-    !Array.from(relatedThreadIds).some((threadId) => notification.actionUrl.includes(`/admin/chats/${threadId}`))
-  ));
-  window.localStorage.setItem(ADMIN_NOTIFICATIONS_KEY, JSON.stringify(notifications));
-  window.dispatchEvent(new CustomEvent(ADMIN_NOTIFICATION_EVENT));
-
-  const email = readClients().find((client) => client.id === clientId)?.email.toLowerCase();
-  if (email) {
-    const users = JSON.parse(window.localStorage.getItem('zoom-workspace-users-v2') || '[]') as Array<{ email?: string }>;
-    window.localStorage.setItem('zoom-workspace-users-v2', JSON.stringify(users.filter((user) => user.email?.toLowerCase() !== email)));
-    const session = JSON.parse(window.localStorage.getItem('zoom-workspace-session-v2') || 'null') as { email?: string } | null;
-    if (session?.email?.toLowerCase() === email) window.localStorage.removeItem('zoom-workspace-session-v2');
-  }
-
   if (isSupabaseConfigured && supabase) {
-    const { error } = await supabase.from('client_profiles').delete().eq('id', clientId);
+    const workspace = await requireAdminWorkspace();
+    const { error } = await supabase.from('client_profiles').delete().eq('id', clientId).eq('admin_account_id', workspace.id);
     if (error) throw error;
   }
 

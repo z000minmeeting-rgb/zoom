@@ -1,6 +1,7 @@
 # Supabase Setup
 
 The app is prepared for Supabase through `src/app/lib/supabase.ts` and `.env.example`.
+For the admin cloud/workspace deployment procedure, use [docs/admin-cloud-sync-deployment.md](docs/admin-cloud-sync-deployment.md). The legacy `schema.sql` baseline alone is not sufficient for the hardened admin architecture; apply the timestamped migration as well.
 
 ## Environment Variables
 
@@ -13,13 +14,14 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key
 
 Do not put the service-role key in frontend files or Netlify public build variables.
 
-The admin dashboard opens through `/admin/login` with the 4-digit PIN `1688`, so it can be accessed from any device without creating a separate local admin profile per phone.
+The admin dashboard uses Supabase Auth email/password sign-in and requires the authenticated user to be a member of an `admin_accounts` workspace. It does not use a browser PIN or `localStorage` authorization flag.
 
 ## Database Schema
 
-Run `supabase/schema.sql` in the Supabase SQL Editor, or apply it with the Supabase CLI using database credentials.
-
-The schema file is safe to rerun. It recreates the row-level security policies that allow the browser app, using the anon key, to read and write the app tables. If the app shows a Supabase sync warning like `new row violates row-level security policy`, rerun `supabase/schema.sql` in your Supabase project.
+Apply the timestamped files in `supabase/migrations/` with `supabase db push`.
+Do not rerun a legacy schema baseline that restores anonymous browser CRUD: the
+production model uses workspace RLS for administrators and restricted Edge
+Functions for public booking and guest chat.
 
 The service-role JWT can create storage buckets through the API, but Supabase does not expose arbitrary SQL DDL execution through the normal REST API.
 

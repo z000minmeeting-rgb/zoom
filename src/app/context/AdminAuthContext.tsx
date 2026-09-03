@@ -1,69 +1,110 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { User } from '@supabase/supabase-js';
+import { isSupabaseConfigured, requireSupabase } from '../lib/supabase';
+import { clearCloudCache } from '../data/adminCache';
+import { AdminWorkspace, resolveAdminWorkspace } from '../data/adminWorkspace';
 
-type AdminLoginPayload = {
-  pin: string;
-};
-
-type AdminLoginResult = {
-  ok: boolean;
-  message?: string;
-};
+type AdminLoginPayload = { email: string; password: string };
+type AdminLoginResult = { ok: boolean; message?: string };
+export type AdminAuthState = 'loading' | 'signed_out' | 'unauthorized' | 'authorized' | 'error';
 
 type AdminAuthContextValue = {
+  state: AdminAuthState;
+  user: User | null;
+  workspace: AdminWorkspace | null;
   isAdminConfigured: boolean;
   isAdminAuthenticated: boolean;
   isCheckingAdmin: boolean;
+  error: string | null;
   loginAdmin: (payload: AdminLoginPayload) => Promise<AdminLoginResult>;
-  logoutAdmin: () => void;
+  logoutAdmin: () => Promise<void>;
 };
-
-const ADMIN_PIN = '1688';
-const ADMIN_PIN_SESSION_KEY = 'zoom-admin-pin-session-v1';
 
 const AdminAuthContext = createContext<AdminAuthContextValue | undefined>(undefined);
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
-  const [isCheckingAdmin, setIsCheckingAdmin] = useState(true);
-  const isAdminConfigured = true;
+  const [state, setState] = useState<AdminAuthState>('loading');
+  const [user, setUser] = useState<User | null>(null);
+  const [workspace, setWorkspace] = useState<AdminWorkspace | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const resolve = async (nextUser: User | null) => {
+    setUser(nextUser);
+    setError(null);
+    if (!nextUser) {
+      setWorkspace(null);
+      setState('signed_out');
+      return;
+    }
+    try {
+      const nextWorkspace = await resolveAdminWorkspace(nextUser);
+      setWorkspace(nextWorkspace);
+      setState(nextWorkspace ? 'authorized' : 'unauthorized');
+    } catch (cause) {
+      setWorkspace(null);
+      setState('error');
+      setError(cause instanceof Error ? cause.message : 'Unable to verify administrator access.');
+    }
+  };
 
   useEffect(() => {
-    setIsAdminAuthenticated(window.localStorage.getItem(ADMIN_PIN_SESSION_KEY) === 'true');
-    setIsCheckingAdmin(false);
+    if (!isSupabaseConfigured) {
+      setState('error');
+      setError('Admin authentication requires VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+      return;
+    }
+    const client = requireSupabase();
+    let active = true;
+    client.auth.getUser().then(({ data, error: authError }) => {
+      if (!active) return;
+      if (authError) {
+        setState('error');
+        setError(authError.message);
+        return;
+      }
+      resolve(data.user).catch(() => undefined);
+    });
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
+      resolve(session?.user ?? null).catch(() => undefined);
+    });
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   const value = useMemo<AdminAuthContextValue>(() => ({
-    isAdminConfigured,
-    isAdminAuthenticated,
-    isCheckingAdmin,
-    loginAdmin: async ({ pin }) => {
-      if (pin.trim() !== ADMIN_PIN) {
-        return { ok: false, message: 'Admin PIN is incorrect.' };
+    state, user, workspace,
+    isAdminConfigured: isSupabaseConfigured,
+    isAdminAuthenticated: state === 'authorized',
+    isCheckingAdmin: state === 'loading',
+    error,
+    loginAdmin: async ({ email, password }) => {
+      if (!isSupabaseConfigured) return { ok: false, message: 'Supabase is not configured.' };
+      setState('loading');
+      setError(null);
+      const { data, error: signInError } = await requireSupabase().auth.signInWithPassword({ email: email.trim(), password });
+      if (signInError || !data.user) {
+        setState('signed_out');
+        return { ok: false, message: signInError?.message || 'Unable to sign in.' };
       }
-
-      window.localStorage.setItem(ADMIN_PIN_SESSION_KEY, 'true');
-      setIsAdminAuthenticated(true);
+      await resolve(data.user);
       return { ok: true };
     },
-    logoutAdmin: () => {
-      window.localStorage.removeItem(ADMIN_PIN_SESSION_KEY);
-      setIsAdminAuthenticated(false);
+    logoutAdmin: async () => {
+      clearCloudCache();
+      if (isSupabaseConfigured) await requireSupabase().auth.signOut();
+      setWorkspace(null);
+      setUser(null);
+      setState('signed_out');
     },
-  }), [isAdminAuthenticated, isAdminConfigured, isCheckingAdmin]);
+  }), [state, user, workspace, error]);
 
-  return (
-    <AdminAuthContext.Provider value={value}>
-      {children}
-    </AdminAuthContext.Provider>
-  );
+  return <AdminAuthContext.Provider value={value}>{children}</AdminAuthContext.Provider>;
 }
 
 export function useAdminAuth() {
   const context = useContext(AdminAuthContext);
-
-  if (!context) {
-    throw new Error('useAdminAuth must be used inside AdminAuthProvider');
-  }
-
+  if (!context) throw new Error('useAdminAuth must be used inside AdminAuthProvider');
   return context;
 }

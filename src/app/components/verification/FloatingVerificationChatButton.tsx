@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { MessageCircle, Plus, RotateCcw, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getSavedThreadSession, getThread, refreshThreadsFromRemote } from '../../data/verificationChat';
 
 type FloatingVerificationChatButtonProps = {
   onStartNew?: () => void;
@@ -11,21 +10,6 @@ export function FloatingVerificationChatButton({ onStartNew }: FloatingVerificat
   const navigate = useNavigate();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
-  const [threadCacheVersion, setThreadCacheVersion] = useState(0);
-  const activeSearchParams = new URLSearchParams(location.search);
-  const threadAccessContext = {
-    clientId: activeSearchParams.get('clientId')?.trim() || '',
-    meetingLinkToken: activeSearchParams.get('meetingLink')?.trim() || '',
-    hostName: activeSearchParams.get('hostName')?.trim() || activeSearchParams.get('clientName')?.trim() || '',
-  };
-  const savedThread = useMemo(
-    () => getThread(getSavedThreadSession(threadAccessContext)),
-    [location.search, threadCacheVersion]
-  );
-
-  useEffect(() => {
-    refreshThreadsFromRemote().then(() => setThreadCacheVersion((version) => version + 1));
-  }, [location.search]);
 
   const registrationPath = () => {
     const searchParams = new URLSearchParams(location.search);
@@ -54,14 +38,10 @@ export function FloatingVerificationChatButton({ onStartNew }: FloatingVerificat
     navigate(registrationPath());
   };
 
+  // Chat access is a private credential, never something this menu can look up.
+  // Returning customers are sent to the form that emails them a fresh link.
   const continueConversation = () => {
     setIsOpen(false);
-
-    if (savedThread) {
-      navigate(`/verification-chat/${savedThread.id}`);
-      return;
-    }
-
     navigate(returningPath());
   };
 
@@ -107,7 +87,7 @@ export function FloatingVerificationChatButton({ onStartNew }: FloatingVerificat
               <span className="min-w-0">
                 <span className="block text-sm text-[#172033]" style={{ fontWeight: 900 }}>Continue old chat</span>
                 <span className="block text-xs text-[#6B7280]">
-                  {savedThread ? `${savedThread.fullName} - ${savedThread.status}` : 'Restore with your name and contact.'}
+                  Get a secure link emailed to you.
                 </span>
               </span>
             </button>

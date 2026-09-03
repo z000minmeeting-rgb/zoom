@@ -1,19 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft, BadgeCheck, ShieldCheck, UserRound } from 'lucide-react';
 import { loadSubscriptionContent, refreshSubscriptionContentFromRemote } from '../data/subscriptionPackages';
 import { FloatingVerificationChatButton } from './verification/FloatingVerificationChatButton';
-import {
-  createVerificationThread,
-  findReturningThread,
-  getSavedThreadSession,
-  getThread,
-  refreshThreadsFromRemote,
-  saveThreadSession,
-} from '../data/verificationChat';
 import { getClientAvatarImage, refreshClientProfilesFromRemote } from '../data/clientProfiles';
+import { requestChatAccessLink, submitBooking } from '../data/publicBooking';
+import { emailFormatError } from '../lib/emailValidation';
+import { EdgeFunctionError } from '../lib/edgeFunctions';
 
 const subscriberInputClassName = 'relative z-10 w-full rounded-[1.35rem] bg-[#F7F9FC] px-4 py-3 text-[#172033] shadow-[inset_0_0_0_1px_rgba(216,228,255,0.95)] outline-none transition-colors placeholder:text-[#8A94A6] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0B5CFF]';
 const emptyRegistrationForm = {
@@ -52,27 +47,21 @@ export function SubscriptionRegistrationScreen() {
   const heroAvatarImage = clientAvatarImage || (isImageAvatarValue(hostAvatar) ? hostAvatar : '');
   const hostAvatarColor = isImageAvatarValue(hostAvatar) ? '#0B5CFF' : hostAvatar;
   const hasGeneratedClientMeetingLink = Boolean(searchParams.get('meetingLink') && clientId);
-  const [threadCacheVersion, setThreadCacheVersion] = useState(0);
-  const threadAccessContext = useMemo(() => ({
-    clientId,
-    meetingLinkToken,
-    hostName,
-  }), [clientId, hostName, meetingLinkToken]);
-  const savedThread = useMemo(
-    () => getThread(getSavedThreadSession(threadAccessContext)),
-    [threadAccessContext, threadCacheVersion]
-  );
   const registrationFormRef = useRef<HTMLFormElement | null>(null);
   const returningFormRef = useRef<HTMLFormElement | null>(null);
 
   const [form, setForm] = useState(emptyRegistrationForm);
+  const [emailError, setEmailError] = useState('');
+  const [submitError, setSubmitError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [returningName, setReturningName] = useState('');
   const [returningContact, setReturningContact] = useState('');
   const [returningError, setReturningError] = useState('');
+  const [accessLinkSent, setAccessLinkSent] = useState(false);
+  const [isRequestingLink, setIsRequestingLink] = useState(false);
 
   useEffect(() => {
     refreshSubscriptionContentFromRemote().then(setContent);
-    refreshThreadsFromRemote().then(() => setThreadCacheVersion((version) => version + 1));
   }, []);
 
   useEffect(() => {
@@ -96,47 +85,97 @@ export function SubscriptionRegistrationScreen() {
 
   const updateForm = (key: keyof typeof form, value: string) => {
     setForm((currentForm) => ({ ...currentForm, [key]: value }));
+
+    if (key === 'email') {
+      setEmailError('');
+    }
+
+    setSubmitError('');
   };
 
   const resetRegistrationForm = () => {
     setForm(emptyRegistrationForm);
+    setEmailError('');
+    setSubmitError('');
     setReturningError('');
     registrationFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
-    if (!selectedPackage) {
+    if (!selectedPackage || isSubmitting) {
       return;
     }
 
-    const thread = createVerificationThread({
-      ...form,
-      packageId: selectedPackage.id,
-      packageName: selectedPackage.name,
-      packagePrice: selectedPackage.price,
-      hostName,
-      hostAvatar,
-      hostInitials,
-      clientId,
-      meetingLinkToken,
-    });
+    // Format only. Whether the mailbox exists is decided by the mail server
+    // afterwards, and is reported separately as a delivery failure.
+    const formatError = emailFormatError(form.email);
 
-    navigate(`/verification-chat/${thread.id}`);
+    if (formatError) {
+      setEmailError(formatError);
+      setSubmitError('');
+      return;
+    }
+
+    setEmailError('');
+    setSubmitError('');
+    setIsSubmitting(true);
+
+    try {
+      const booking = await submitBooking({
+        ...form,
+        packageId: selectedPackage.id,
+        packageName: selectedPackage.name,
+        packagePrice: selectedPackage.price,
+        hostName,
+        hostAvatar,
+        hostInitials,
+        clientId,
+        meetingLinkToken,
+      });
+      navigate(`/verification-chat/${booking.threadId}`);
+    } catch (error) {
+      if (error instanceof EdgeFunctionError && error.field === 'email') {
+        setEmailError(error.message);
+      } else {
+        setSubmitError(error instanceof Error ? error.message : 'Unable to submit your booking.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleReturningAccess = (event: FormEvent) => {
+  /**
+   * Recovery never returns a chat link to whoever asked for it. A fresh secure
+   * link is emailed to the address already on the booking, so a thread ID or a
+   * guessed name grants nothing.
+   */
+  const handleReturningAccess = async (event: FormEvent) => {
     event.preventDefault();
-    const thread = findReturningThread(returningName, returningContact, threadAccessContext);
 
-    if (!thread) {
-      setReturningError('No verification chat matched those details.');
+    if (isRequestingLink) {
       return;
     }
 
-    saveThreadSession(thread.id, thread);
-    navigate(`/verification-chat/${thread.id}`);
+    const formatError = emailFormatError(returningContact);
+
+    if (formatError) {
+      setReturningError(formatError);
+      return;
+    }
+
+    setReturningError('');
+    setIsRequestingLink(true);
+
+    try {
+      await requestChatAccessLink(returningName, returningContact);
+      setAccessLinkSent(true);
+    } catch (error) {
+      setReturningError(error instanceof Error ? error.message : 'Unable to send an access link right now.');
+    } finally {
+      setIsRequestingLink(false);
+    }
   };
 
   return (
@@ -206,24 +245,6 @@ export function SubscriptionRegistrationScreen() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8, delay: 0.08 }}
         >
-          {savedThread && (
-            <div className="rounded-[1.5rem] border border-[#D8E4FF] bg-white/90 p-5 shadow-sm backdrop-blur">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm text-[#0B5CFF] font-black">Existing verification found</p>
-                  <p className="mt-1 text-[#172033] font-extrabold">{savedThread.fullName} - {savedThread.status}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/verification-chat/${savedThread.id}`)}
-                  className="rounded-full bg-[#0B5CFF] px-5 py-3 text-white shadow-[0_14px_34px_rgba(11,92,255,0.22)]"
-                >
-                  Continue Verification Chat
-                </button>
-              </div>
-            </div>
-          )}
-
           <form ref={registrationFormRef} onSubmit={handleSubmit} className="rounded-[2rem] border border-[#D8E4FF] bg-white/90 p-5 shadow-[0_28px_90px_rgba(11,92,255,0.10)] backdrop-blur-xl lg:p-7">
             <div className="mb-6 flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#E8F1FF]">
@@ -245,9 +266,29 @@ export function SubscriptionRegistrationScreen() {
               <SubscriberFieldFrame>
                 <input required value={form.country} onChange={(event) => updateForm('country', event.target.value)} placeholder="Country/Location" className={subscriberInputClassName} />
               </SubscriberFieldFrame>
-              <SubscriberFieldFrame>
-                <input required type="email" value={form.email} onChange={(event) => updateForm('email', event.target.value)} placeholder="Email Address" className={subscriberInputClassName} />
-              </SubscriberFieldFrame>
+              <div>
+                <SubscriberFieldFrame>
+                  <input
+                    required
+                    type="email"
+                    value={form.email}
+                    onChange={(event) => updateForm('email', event.target.value)}
+                    onBlur={(event) => setEmailError(event.target.value ? emailFormatError(event.target.value) : '')}
+                    placeholder="Email Address"
+                    aria-invalid={Boolean(emailError)}
+                    aria-describedby={emailError ? 'subscriber-email-error' : undefined}
+                    className={`${subscriberInputClassName} ${emailError ? 'shadow-[inset_0_0_0_1px_#FEE4E2] focus:ring-[#B42318]' : ''}`}
+                  />
+                </SubscriberFieldFrame>
+                {emailError && (
+                  <p id="subscriber-email-error" role="alert" className="mt-2 px-1 text-xs text-[#B42318] font-extrabold">
+                    {emailError}
+                  </p>
+                )}
+                <p className="mt-2 px-1 text-xs text-[#6B7280]">
+                  Your booking confirmation and every management update are sent here.
+                </p>
+              </div>
               <SubscriberFieldFrame>
                 <input value={form.phone} onChange={(event) => updateForm('phone', event.target.value)} placeholder="Phone Number (optional)" className={subscriberInputClassName} />
               </SubscriberFieldFrame>
@@ -276,29 +317,67 @@ export function SubscriptionRegistrationScreen() {
               </div>
             </div>
 
-            <button type="submit" className="mt-6 w-full rounded-full bg-[linear-gradient(135deg,#0B5CFF,#25B7FF)] px-6 py-4 text-white shadow-[0_18px_45px_rgba(11,92,255,0.24)] font-black">
-              Continue to Payment Verification Chat
+            {submitError && (
+              <p role="alert" className="mt-5 rounded-2xl border border-[#FEE4E2] bg-[#FFF5F4] p-4 text-sm text-[#B42318]">
+                {submitError}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="mt-6 w-full rounded-full bg-[linear-gradient(135deg,#0B5CFF,#25B7FF)] px-6 py-4 text-white shadow-[0_18px_45px_rgba(11,92,255,0.24)] font-black disabled:bg-[#B6C2D6] disabled:bg-none disabled:shadow-none"
+            >
+              {isSubmitting ? 'Submitting your booking...' : 'Continue to Payment Verification Chat'}
             </button>
           </form>
 
           <form ref={returningFormRef} onSubmit={handleReturningAccess} className="rounded-[2rem] border border-[#E5E9F2] bg-white/90 p-5 shadow-sm backdrop-blur lg:p-7">
             <h2 className="text-xl text-[#172033] font-black">Continue Verification Chat</h2>
-            <p className="mt-1 text-sm text-[#6B7280]">Verify your identity to restore your chat history and admin responses.</p>
+            <p className="mt-1 text-sm text-[#6B7280]">
+              We email a secure link to the address on your booking. Chat links are private, so we never show one here.
+            </p>
 
-            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <SubscriberFieldFrame>
-                <input required value={returningName} onChange={(event) => setReturningName(event.target.value)} placeholder="Full Name" className={subscriberInputClassName} />
-              </SubscriberFieldFrame>
-              <SubscriberFieldFrame>
-                <input required value={returningContact} onChange={(event) => setReturningContact(event.target.value)} placeholder="Email or phone number" className={subscriberInputClassName} />
-              </SubscriberFieldFrame>
-            </div>
+            {accessLinkSent ? (
+              <div className="mt-5 rounded-2xl border border-[#BFE7D1] bg-[#EEFBF4] p-4 text-sm text-[#157347]">
+                <p className="font-extrabold">Check your email</p>
+                <p className="mt-1 leading-6">
+                  If a booking matches those details, a secure chat link is on its way. The link opens your conversation
+                  and expires after 30 days.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <SubscriberFieldFrame>
+                    <input required value={returningName} onChange={(event) => setReturningName(event.target.value)} placeholder="Full Name" className={subscriberInputClassName} />
+                  </SubscriberFieldFrame>
+                  <SubscriberFieldFrame>
+                    <input
+                      required
+                      type="email"
+                      value={returningContact}
+                      onChange={(event) => {
+                        setReturningContact(event.target.value);
+                        setReturningError('');
+                      }}
+                      placeholder="Email address on your booking"
+                      className={subscriberInputClassName}
+                    />
+                  </SubscriberFieldFrame>
+                </div>
 
-            {returningError && <p className="mt-3 text-sm text-[#B42318]">{returningError}</p>}
+                {returningError && <p role="alert" className="mt-3 text-sm text-[#B42318]">{returningError}</p>}
 
-            <button type="submit" className="mt-5 rounded-full border border-[#D8E4FF] bg-white px-6 py-3 text-[#0B5CFF] hover:bg-[#F4F8FF] font-black">
-              Restore chat access
-            </button>
+                <button
+                  type="submit"
+                  disabled={isRequestingLink}
+                  className="mt-5 rounded-full border border-[#D8E4FF] bg-white px-6 py-3 text-[#0B5CFF] hover:bg-[#F4F8FF] font-black disabled:text-[#B6C2D6]"
+                >
+                  {isRequestingLink ? 'Sending link...' : 'Email me a chat link'}
+                </button>
+              </>
+            )}
           </form>
         </motion.section>
       </main>

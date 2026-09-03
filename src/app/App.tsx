@@ -19,6 +19,7 @@ import { AdminSubscriptionSettingsScreen } from './components/AdminSubscriptionS
 import { AdminVerificationChatsScreen } from './components/AdminVerificationChatsScreen';
 import { AdminSubscribersScreen } from './components/AdminSubscribersScreen';
 import { AdminMediaGalleryScreen } from './components/AdminMediaGalleryScreen';
+import { AdminEmailDeliveryScreen } from './components/AdminEmailDeliveryScreen';
 import { Sidebar } from './components/Sidebar';
 import { AIAssistantPanel } from './components/AIAssistantPanel';
 import { MobileBottomNav } from './components/MobileBottomNav';
@@ -26,6 +27,7 @@ import { UserProvider, useUser } from './context/UserContext';
 import { LocalizationProvider } from './context/LocalizationContext';
 import { AdminAuthProvider, useAdminAuth } from './context/AdminAuthContext';
 import { PlaceholderWorkspaceScreen } from './components/workspace/PlaceholderWorkspaceScreen';
+import { AdminCloudSync } from './components/AdminCloudSync';
 
 const workspacePaths = ['/home', '/dashboard', '/meetings', '/team-chat', '/mail', '/calendar', '/whiteboards', '/contacts', '/settings'];
 
@@ -109,6 +111,7 @@ export default function App() {
     <LocalizationProvider>
       <UserProvider>
         <AdminAuthProvider>
+        <AdminCloudSync />
         <BrowserRouter>
           <AppLayout>
             <Routes>
@@ -139,6 +142,7 @@ export default function App() {
               <Route path="/admin/chats/:threadId" element={<AdminRoute><AdminVerificationChatsScreen /></AdminRoute>} />
               <Route path="/admin/subscribers" element={<AdminRoute><AdminSubscribersScreen /></AdminRoute>} />
               <Route path="/admin/media" element={<AdminRoute><AdminMediaGalleryScreen /></AdminRoute>} />
+              <Route path="/admin/email" element={<AdminRoute><AdminEmailDeliveryScreen /></AdminRoute>} />
               <Route path="/admin/clients/:clientId" element={<AdminRoute><AdminDashboardScreen /></AdminRoute>} />
               <Route path="*" element={<Navigate to="/splash" replace />} />
             </Routes>

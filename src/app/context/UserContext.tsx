@@ -97,7 +97,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         title: 'New User Registered',
         description: `User: ${nextUser.fullName}.`,
         actionUrl: '/admin/subscribers',
-      });
+      }).catch(() => undefined);
       return { ok: true };
     },
     register: ({ fullName, email, password }) => {

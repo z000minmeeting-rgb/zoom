@@ -87,14 +87,14 @@ export function WorkspaceTopBar({ leadingContent }: WorkspaceTopBarProps = {}) {
     window.localStorage.setItem(DISMISSED_NOTIFICATIONS_KEY, JSON.stringify(nextDismissedIds));
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
     threads.forEach((thread) => markThreadSeen(thread.id, 'admin'));
     setThreads(readThreads());
-    setAdminNotifications(markAllAdminNotificationsRead());
+    setAdminNotifications(await markAllAdminNotificationsRead());
   };
 
-  const openAdminNotification = (notification: AdminNotification) => {
-    setAdminNotifications(markAdminNotificationRead(notification.id));
+  const openAdminNotification = async (notification: AdminNotification) => {
+    setAdminNotifications(await markAdminNotificationRead(notification.id));
     window.location.href = notification.actionUrl;
   };
 

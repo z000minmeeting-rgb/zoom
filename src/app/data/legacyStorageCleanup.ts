@@ -12,14 +12,8 @@ const LEGACY_KEYS_TO_REMOVE = [
 ];
 
 export function clearLegacyLaunchData() {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  if (window.localStorage.getItem(LEGACY_DATA_CLEANUP_KEY) === 'done') {
-    return;
-  }
-
-  LEGACY_KEYS_TO_REMOVE.forEach((key) => window.localStorage.removeItem(key));
-  window.localStorage.setItem(LEGACY_DATA_CLEANUP_KEY, 'done');
+  // Intentionally retired. Legacy keys are migration sources and must remain
+  // available until a later, explicitly approved cleanup release.
+  void LEGACY_DATA_CLEANUP_KEY;
+  void LEGACY_KEYS_TO_REMOVE;
 }
