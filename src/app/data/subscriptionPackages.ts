@@ -245,6 +245,67 @@ export async function refreshSubscriptionContentFromRemote() {
   return content;
 }
 
+/**
+ * Package content for the public booking pages.
+ *
+ * Visitors have no admin workspace, so `refreshSubscriptionContentFromRemote()`
+ * fails for them and silently yields the hardcoded defaults — which is why a
+ * price the admin edited never reached a customer. This reads the
+ * `public_subscription_content` projection instead, which resolves the host's
+ * workspace from the meeting link and returns the saved page content.
+ *
+ * Admins use the same path on these screens, so what an admin previews is
+ * exactly what a visitor gets.
+ */
+export async function fetchPublicSubscriptionContent(clientId: string): Promise<SubscriptionPageContent | null> {
+  if (!isSupabaseConfigured || !supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase.rpc('public_subscription_content', {
+    p_client_id: clientId || null,
+  });
+
+  if (error) {
+    console.warn('Unable to load package content for this link:', error.message);
+    return null;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const content = normalizeLoadedContent(data as Partial<SubscriptionPageContent>);
+  writeSubscriptionContentLocal(content);
+  return content;
+}
+
+/**
+ * Whether this workspace already has saved content in the cloud.
+ *
+ * The legacy importer uses this so it can never overwrite live pricing with a
+ * stale copy from one device's localStorage.
+ */
+export async function hasStoredSubscriptionContent() {
+  if (!isSupabaseConfigured || !supabase) {
+    return false;
+  }
+
+  const workspace = await requireAdminWorkspace();
+
+  const { data, error } = await supabase
+    .from('subscription_content')
+    .select('id')
+    .eq('admin_account_id', workspace.id)
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data?.length ?? 0) > 0;
+}
+
 export async function resetSubscriptionContent() {
   const defaultContent = cloneContent(defaultSubscriptionContent);
   await saveSubscriptionContent(defaultContent);

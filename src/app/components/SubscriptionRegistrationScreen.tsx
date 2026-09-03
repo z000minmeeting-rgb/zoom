@@ -3,7 +3,7 @@ import type { FormEvent, ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft, BadgeCheck, ShieldCheck, UserRound } from 'lucide-react';
-import { loadSubscriptionContent, refreshSubscriptionContentFromRemote } from '../data/subscriptionPackages';
+import { usePublicSubscriptionContent } from '../data/usePublicSubscriptionContent';
 import { FloatingVerificationChatButton } from './verification/FloatingVerificationChatButton';
 import { fetchPublicClientDisplay, getClientAvatarImage } from '../data/clientProfiles';
 import { requestChatAccessLink, submitBooking } from '../data/publicBooking';
@@ -35,8 +35,8 @@ function isImageAvatarValue(value: string) {
 export function SubscriptionRegistrationScreen() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [content, setContent] = useState(() => loadSubscriptionContent());
   const clientId = searchParams.get('clientId')?.trim() || '';
+  const content = usePublicSubscriptionContent(clientId);
   const meetingLinkToken = searchParams.get('meetingLink')?.trim() || '';
   const packageId = searchParams.get('packageId') || content.packages[0]?.id || '';
   const selectedPackage = content.packages.find((subscriptionPackage) => subscriptionPackage.id === packageId) || content.packages[0];
@@ -59,10 +59,6 @@ export function SubscriptionRegistrationScreen() {
   const [returningError, setReturningError] = useState('');
   const [accessLinkSent, setAccessLinkSent] = useState(false);
   const [isRequestingLink, setIsRequestingLink] = useState(false);
-
-  useEffect(() => {
-    refreshSubscriptionContentFromRemote().then(setContent);
-  }, []);
 
   useEffect(() => {
     // The admin cache first, so an admin previewing their own link renders

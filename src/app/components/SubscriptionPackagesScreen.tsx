@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { BadgeCheck, CalendarCheck, CalendarClock, Check, ChevronLeft, ChevronRight, CreditCard, Crown, FileCheck2, ShieldCheck, Sparkles, UsersRound, Video } from 'lucide-react';
-import { formatSubscriptionText, loadSubscriptionContent, refreshSubscriptionContentFromRemote } from '../data/subscriptionPackages';
+import { formatSubscriptionText } from '../data/subscriptionPackages';
+import { usePublicSubscriptionContent } from '../data/usePublicSubscriptionContent';
 import { FloatingVerificationChatButton } from './verification/FloatingVerificationChatButton';
 import { fetchPublicClientDisplay, getClientAvatarImage } from '../data/clientProfiles';
 
@@ -261,8 +262,8 @@ export function SubscriptionPackagesScreen() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [selectedPackageId, setSelectedPackageId] = useState('');
-  const [content, setContent] = useState(() => loadSubscriptionContent());
   const clientId = searchParams.get('clientId')?.trim() || '';
+  const content = usePublicSubscriptionContent(clientId);
   const hostName = searchParams.get('hostName')?.trim() || searchParams.get('clientName')?.trim() || 'the meeting host';
   const hostAvatar = searchParams.get('hostAvatar') || '#0B5CFF';
   const hostInitials = searchParams.get('hostInitials') || getInitials(hostName);
@@ -296,10 +297,6 @@ export function SubscriptionPackagesScreen() {
   const closingTemplate = content.closingTemplate === LEGACY_CLOSING_TEMPLATE ? TRUST_CLOSING_TEMPLATE : content.closingTemplate;
   const activeProcessStep = subscriptionSteps[activeProcessStepIndex];
   const ActiveProcessIcon = activeProcessStep.icon;
-
-  useEffect(() => {
-    refreshSubscriptionContentFromRemote().then(setContent);
-  }, []);
 
   useEffect(() => {
     // The admin cache first, so an admin previewing their own link renders

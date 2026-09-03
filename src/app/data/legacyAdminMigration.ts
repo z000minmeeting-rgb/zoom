@@ -1,7 +1,7 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { readLegacyClients, readClients, refreshClientProfilesFromRemote, saveClientProfiles, type ClientProfile } from './clientProfiles';
 import { readLegacyThreads, readThreads, refreshThreadsFromRemote, persistThreadRemote, type VerificationThread } from './verificationChat';
-import { loadLegacySubscriptionContent, loadSubscriptionContent, refreshSubscriptionContentFromRemote, saveSubscriptionContent } from './subscriptionPackages';
+import { hasStoredSubscriptionContent, loadLegacySubscriptionContent, refreshSubscriptionContentFromRemote, saveSubscriptionContent } from './subscriptionPackages';
 import { readLegacyAdminNotifications } from './adminNotifications';
 import { requireAdminWorkspace } from './adminWorkspace';
 
@@ -75,11 +75,19 @@ export async function importLegacyAdminData(): Promise<LegacyMigrationResult> {
       importClients.forEach(() => increment(result.imported, 'client_profiles'));
     }
 
-    const legacyContent = loadLegacySubscriptionContent();
+    // Cloud content wins, always. This previously compared the legacy copy to
+    // the cloud copy and wrote the legacy one on any difference, so signing in
+    // on a device holding an old localStorage snapshot silently reverted live
+    // package pricing — which is exactly what happened to this workspace at
+    // 09:40 on 2026-09-03. Legacy content is now only ever used to seed a
+    // workspace that has never saved any.
     increment(result.examined, 'subscription_content');
-    const cloudContent = loadSubscriptionContent();
-    if (JSON.stringify(cloudContent) === JSON.stringify(legacyContent)) increment(result.skipped, 'subscription_content');
-    else { await saveSubscriptionContent(legacyContent); increment(result.imported, 'subscription_content'); }
+    if (await hasStoredSubscriptionContent()) {
+      increment(result.skipped, 'subscription_content');
+    } else {
+      await saveSubscriptionContent(loadLegacySubscriptionContent());
+      increment(result.imported, 'subscription_content');
+    }
 
     for (const notification of readLegacyAdminNotifications()) {
       increment(result.examined, 'admin_notifications');
