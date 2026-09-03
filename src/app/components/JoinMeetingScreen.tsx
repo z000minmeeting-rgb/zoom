@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { FloatingVerificationChatButton } from './verification/FloatingVerificationChatButton';
-import { getClientAvatarImage, refreshClientProfilesFromRemote } from '../data/clientProfiles';
+import { fetchPublicClientDisplay, getClientAvatarImage } from '../data/clientProfiles';
 
 function isImageAvatarValue(value: string) {
   return /^(data:image\/|https?:\/\/|\/)/.test(value);
@@ -29,10 +29,22 @@ export function JoinMeetingScreen() {
   const [videoDisabled, setVideoDisabled] = useState(false);
 
   useEffect(() => {
+    // The admin cache first, so an admin previewing their own link renders
+    // immediately; then the public projection, which is the only source a
+    // visitor is allowed to read.
     setClientAvatarImage(getClientAvatarImage(clientId));
-    refreshClientProfilesFromRemote().then(() => {
-      setClientAvatarImage(getClientAvatarImage(clientId));
+
+    let active = true;
+
+    fetchPublicClientDisplay(clientId).then((profile) => {
+      if (active && profile?.avatarImage) {
+        setClientAvatarImage(profile.avatarImage);
+      }
     });
+
+    return () => {
+      active = false;
+    };
   }, [clientId]);
 
   const handleJoin = (e: React.FormEvent) => {

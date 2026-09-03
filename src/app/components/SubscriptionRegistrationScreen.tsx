@@ -5,7 +5,7 @@ import { motion } from 'motion/react';
 import { ArrowLeft, BadgeCheck, ShieldCheck, UserRound } from 'lucide-react';
 import { loadSubscriptionContent, refreshSubscriptionContentFromRemote } from '../data/subscriptionPackages';
 import { FloatingVerificationChatButton } from './verification/FloatingVerificationChatButton';
-import { getClientAvatarImage, refreshClientProfilesFromRemote } from '../data/clientProfiles';
+import { fetchPublicClientDisplay, getClientAvatarImage } from '../data/clientProfiles';
 import { requestChatAccessLink, submitBooking } from '../data/publicBooking';
 import { emailFormatError } from '../lib/emailValidation';
 import { EdgeFunctionError } from '../lib/edgeFunctions';
@@ -65,10 +65,22 @@ export function SubscriptionRegistrationScreen() {
   }, []);
 
   useEffect(() => {
+    // The admin cache first, so an admin previewing their own link renders
+    // immediately; then the public projection, which is the only source a
+    // visitor is allowed to read.
     setClientAvatarImage(getClientAvatarImage(clientId));
-    refreshClientProfilesFromRemote().then(() => {
-      setClientAvatarImage(getClientAvatarImage(clientId));
+
+    let active = true;
+
+    fetchPublicClientDisplay(clientId).then((profile) => {
+      if (active && profile?.avatarImage) {
+        setClientAvatarImage(profile.avatarImage);
+      }
     });
+
+    return () => {
+      active = false;
+    };
   }, [clientId]);
 
   useEffect(() => {

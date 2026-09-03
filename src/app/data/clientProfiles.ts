@@ -203,6 +203,58 @@ export function getClientAvatarImage(clientId: string) {
   return readClients().find((client) => client.id === clientId)?.avatarImage || '';
 }
 
+export type PublicClientDisplay = {
+  id: string;
+  name: string;
+  avatarColor: string;
+  avatarImage: string;
+};
+
+type PublicClientDisplayRow = {
+  id: string;
+  name: string;
+  avatar_color: string;
+  avatar_image_path: string | null;
+};
+
+/**
+ * The host's display details for a public booking page.
+ *
+ * Visitors have no admin workspace, so `refreshClientProfilesFromRemote()`
+ * returns an empty cache for them and `client_profiles` itself is closed to
+ * `anon` by design — it holds the client's email address. This reads the
+ * `public_client_display` projection instead, which exposes only the four
+ * fields these pages render.
+ *
+ * Returns null rather than throwing: the pages already degrade to initials on a
+ * coloured circle, which is the right outcome if the lookup fails.
+ */
+export async function fetchPublicClientDisplay(clientId: string): Promise<PublicClientDisplay | null> {
+  if (!clientId || !isSupabaseConfigured || !supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase.rpc('public_client_display', { p_client_id: clientId });
+
+  if (error) {
+    console.warn('Unable to load the host profile for this link:', error.message);
+    return null;
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as PublicClientDisplayRow | undefined;
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    avatarColor: row.avatar_color,
+    avatarImage: row.avatar_image_path || '',
+  };
+}
+
 export async function deleteClientProfile(clientId: string) {
   const relatedThreads = readThreads().filter((thread) => thread.clientId === clientId);
   await Promise.all(relatedThreads.map((thread) => deleteThread(thread.id)));

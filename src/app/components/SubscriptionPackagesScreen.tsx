@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { BadgeCheck, CalendarCheck, CalendarClock, Check, ChevronLeft, ChevronRight, CreditCard, Crown, FileCheck2, ShieldCheck, Sparkles, UsersRound, Video } from 'lucide-react';
 import { formatSubscriptionText, loadSubscriptionContent, refreshSubscriptionContentFromRemote } from '../data/subscriptionPackages';
 import { FloatingVerificationChatButton } from './verification/FloatingVerificationChatButton';
-import { getClientAvatarImage, refreshClientProfilesFromRemote } from '../data/clientProfiles';
+import { fetchPublicClientDisplay, getClientAvatarImage } from '../data/clientProfiles';
 
 const smoothEase: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -302,10 +302,22 @@ export function SubscriptionPackagesScreen() {
   }, []);
 
   useEffect(() => {
+    // The admin cache first, so an admin previewing their own link renders
+    // immediately; then the public projection, which is the only source a
+    // visitor is allowed to read.
     setClientAvatarImage(getClientAvatarImage(clientId));
-    refreshClientProfilesFromRemote().then(() => {
-      setClientAvatarImage(getClientAvatarImage(clientId));
+
+    let active = true;
+
+    fetchPublicClientDisplay(clientId).then((profile) => {
+      if (active && profile?.avatarImage) {
+        setClientAvatarImage(profile.avatarImage);
+      }
     });
+
+    return () => {
+      active = false;
+    };
   }, [clientId]);
 
   useEffect(() => {
